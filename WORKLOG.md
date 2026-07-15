@@ -8,6 +8,17 @@ aesthetic, configured conversationally over Signal, running on the user's home
 box. Milestones M0–M5 in PLAN.md §7.
 
 ## State of play
+- **Everything can now run inside the dev container** (no docker needed):
+  nested containers are impossible here (seccomp blocks user namespaces —
+  verified), so `scripts/install_native_services.sh` installs JRE 25 +
+  signal-cli 0.14.6 (aarch64 libsignal swapped into the jar) + source-built
+  signal-cli-rest-api 0.100 into `.deps/` (workspace-persistent, gitignored),
+  and `scripts/signal_api.py start|stop|restart --mode normal|json-rpc`
+  replaces docker compose. **Live-verified in this session:** /v1/about,
+  /v1/accounts, group-endpoint error shapes, normal→json-rpc mode switch,
+  daemon TCP socket + REST connect. Services currently left RUNNING in
+  json-rpc mode (pids in data/signal-api/). setup_signal.py auto-detects
+  docker vs native.
 - **M0 done** (see `bb2d5ed`): Bazel+Nix scaffold, `bazel test //...` green.
 - **M1 code-complete** (see subsequent commits): store, Signal client/group/
   listener, Claude agent loop + 12 validated tools, live-reschedulable
@@ -25,9 +36,11 @@ box. Milestones M0–M5 in PLAN.md §7.
 - pipeline.run_pass is an M1 stub — reports "no fetchers enabled yet".
 
 ## Next up
-1. On the home box: docker compose up, `bazel run //scripts:setup_signal`
-   (GV number + captcha), config.yaml, run the bot, verify M1 exit criterion.
-   Fix any signal-cli-rest-api endpoint mismatches found.
+1. Register the bot account — can now happen IN THIS CONTAINER:
+   `bazel run //scripts:setup_signal` (needs the user for GV number +
+   captcha + SMS code), then config.yaml + ANTHROPIC_API_KEY, then
+   `bazelisk run //finder:finder_bot` → verify M1 exit criterion (create/edit
+   a query entirely from Signal).
 2. Generate + commit flake.lock (first machine with nix).
 3. M2: Craigslist fetcher (httpx + selectolax — add selectolax to
    requirements.in and regen lock), hard filters, notify path in
@@ -42,3 +55,6 @@ box. Milestones M0–M5 in PLAN.md §7.
 ## Don't retry (dead ends)
 - Naming the py_binary `//finder:bot` — output path collides with the
   finder/bot/ package dir (ArtifactPrefixConflict). It's `//finder:finder_bot`.
+- Docker/podman inside this dev container — seccomp EPERMs `unshare -U`,
+  CapEff=0, no /dev/fuse, no docker.sock. Native services are the way.
+- JRE 21 for signal-cli 0.14.x — it's built for class file 69; needs JRE 25.

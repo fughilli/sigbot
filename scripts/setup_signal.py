@@ -37,21 +37,42 @@ def fail(msg: str) -> None:
     sys.exit(f"!! {msg}")
 
 
-def compose(mode: str) -> None:
-    """(Re)start signal-cli-rest-api in the given MODE via docker compose."""
-    say(f"restarting signal-api container in MODE={mode}")
-    subprocess.run(
-        ["docker", "compose", "up", "-d", "--force-recreate", "signal-api"],
-        check=True,
-        env={"SIGNAL_API_MODE": mode, "PATH": "/usr/bin:/usr/local/bin:/bin"},
-    )
+def _docker_available() -> bool:
+    try:
+        return subprocess.run(["docker", "info"], capture_output=True).returncode == 0
+    except FileNotFoundError:
+        return False
+
+
+def _native_available() -> bool:
+    return pathlib.Path(".deps/bin/signal-cli-rest-api").exists()
+
+
+def restart_api(mode: str) -> None:
+    """(Re)start signal-cli-rest-api in the given MODE — docker compose where
+    docker exists (the box), the native runner otherwise (the dev container,
+    which cannot nest containers; see scripts/install_native_services.sh)."""
+    say(f"restarting signal api in MODE={mode}")
+    if _docker_available():
+        subprocess.run(
+            ["docker", "compose", "up", "-d", "--force-recreate", "signal-api"],
+            check=True,
+            env={"SIGNAL_API_MODE": mode, "PATH": "/usr/bin:/usr/local/bin:/bin"},
+        )
+    elif _native_available():
+        subprocess.run(
+            [sys.executable, "scripts/signal_api.py", "restart", "--mode", mode],
+            check=True,
+        )
+    else:
+        fail("no docker and no native install — run scripts/install_native_services.sh")
     for _ in range(30):
         try:
             httpx.get(f"{API}/v1/about", timeout=2)
             return
         except httpx.HTTPError:
             time.sleep(1)
-    fail("signal-api container did not come up")
+    fail("signal api did not come up")
 
 
 def api_mode(c: httpx.Client) -> str:
@@ -73,10 +94,10 @@ def normalize_e164(raw: str) -> str:
 def main() -> None:
     # Phase 0 — preflight
     say("phase 0: preflight")
-    if subprocess.run(["docker", "info"], capture_output=True).returncode != 0:
-        fail("docker is not available — install/start it first")
     if not pathlib.Path("docker-compose.yml").exists():
         fail("run from the repo root (docker-compose.yml not found)")
+    if not (_docker_available() or _native_available()):
+        fail("need docker OR a native install (scripts/install_native_services.sh)")
 
     bot = normalize_e164(ask("Bot number (the Google Voice number):"))
     user = normalize_e164(ask("Your Signal number (for the hello test):"))
@@ -84,7 +105,7 @@ def main() -> None:
     try:
         httpx.get(f"{API}/v1/about", timeout=2)
     except httpx.HTTPError:
-        compose("normal")
+        restart_api("normal")
 
     with httpx.Client(base_url=API, timeout=90) as c:
         # Phase 1+2 — captcha, register, verify (skipped if already registered)
@@ -92,7 +113,7 @@ def main() -> None:
             say(f"{bot} is already registered — skipping registration")
         else:
             if api_mode(c) != "normal":
-                compose("normal")
+                restart_api("normal")
             say("phase 1: captcha (manual)")
             print(f"    Open {CAPTCHA_URL}")
             print("    Solve it; copy the signalcaptcha:// link the page produces.")
@@ -124,7 +145,7 @@ def main() -> None:
 
     # Phase 4 — switch to service (json-rpc) mode
     say("phase 4: switch to json-rpc mode")
-    compose("json-rpc")
+    restart_api("json-rpc")
     with httpx.Client(base_url=API, timeout=90) as c:
         if api_mode(c) != "json-rpc":
             fail("container did not come up in json-rpc mode")

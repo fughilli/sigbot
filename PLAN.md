@@ -171,9 +171,11 @@ Nix covers what the pip lockfile can't — binaries with system-level dependenci
 - **`rules_nixpkgs_core` stays registration-only** — no `nix_repo`/`nixpkgs_package` in `MODULE.bazel` unless a Nix-built library is someday needed *inside* the build graph.
 - **On the home box (and dev container overlay):** install Nix once via the Determinate installer (`--init none`, flakes enabled). Box setup is then: Determinate Nix + Bazelisk + Docker; everything else is pulled hermetically.
 
-### 5.3 Deployment on the box
+### 5.3 Deployment — box and dev container
 
-`docker-compose.yml` owns `signal-cli-rest-api`. The bot runs as a systemd unit executing `bazelisk run //finder:bot` from the repo checkout, with the flake's Playwright env vars set; `Restart=on-failure`. Updates are `git pull && systemctl restart finder-bot` — Bazel rebuilds only what changed.
+`docker-compose.yml` owns `signal-cli-rest-api` where docker exists (the box). The bot runs as a systemd unit executing `bazelisk run //finder:finder_bot` from the repo checkout, with the flake's Playwright env vars set; `Restart=on-failure`. Updates are `git pull && systemctl restart finder-bot` — Bazel rebuilds only what changed.
+
+**Dockerless fallback (dev container):** the dev container cannot nest containers (seccomp blocks unprivileged user namespaces; no docker socket, no capabilities), so the same stack runs natively there: `scripts/install_native_services.sh` installs JRE 25 + signal-cli (with an arch-correct libsignal JNI swapped into the jar on aarch64) + a source-built `signal-cli-rest-api` into the workspace-persistent `.deps/`, and `scripts/signal_api.py` replicates the container entrypoint (normal mode, or json-rpc mode = `jsonrpc2.yml` port map + `signal-cli daemon --tcp`). `setup_signal.py` auto-detects docker vs native. The box can use either path.
 
 ## 6. Repo layout
 
