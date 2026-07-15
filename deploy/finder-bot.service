@@ -1,0 +1,20 @@
+# systemd unit for the finder bot. Install:
+#   sudo cp deploy/finder-bot.service /etc/systemd/system/
+#   sudo systemctl enable --now finder-bot
+# Expects the repo at /opt/signal-ai-bot and /etc/finder-bot.env containing
+# ANTHROPIC_API_KEY=... (chmod 600). M4 adds PLAYWRIGHT_BROWSERS_PATH here.
+[Unit]
+Description=Furniture finder Signal bot
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+User=finder
+WorkingDirectory=/opt/signal-ai-bot
+EnvironmentFile=/etc/finder-bot.env
+ExecStart=/usr/local/bin/bazelisk run //finder:finder_bot
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
