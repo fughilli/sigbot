@@ -1,0 +1,22 @@
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+
+package(default_visibility = ["//visibility:public"])
+
+py_library(
+    name = "finder_lib",
+    srcs = glob(["**/*.py"], exclude = ["main.py"]),
+    deps = [
+        "@pypi//anthropic",
+        "@pypi//apscheduler",
+        "@pypi//httpx",
+        "@pypi//pyyaml",
+        "@pypi//websockets",
+    ],
+)
+
+py_binary(
+    name = "bot",
+    srcs = ["main.py"],
+    main = "main.py",
+    deps = [":finder_lib"],
+)

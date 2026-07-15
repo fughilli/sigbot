@@ -1,0 +1,14 @@
+# bzlmod is the source of truth; no WORKSPACE.
+common --enable_bzlmod
+common --registry=https://bcr.bazel.build
+
+# Hermetic action env so the on-disk cache is correct across machines.
+build --incompatible_strict_action_env
+
+# Persist caches in the project tree (dot-prefixed, gitignored) so they survive
+# container restarts that wipe ~/.cache. Both are content-addressable.
+build  --disk_cache=.bazel-disk-cache
+build  --experimental_disk_cache_gc_max_size=10G
+common --repository_cache=.bazel-repo-cache
+
+test --test_output=errors

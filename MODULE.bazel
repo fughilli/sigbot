@@ -1,0 +1,30 @@
+module(
+    name = "signal_ai_bot",
+    version = "0.0.0",
+    compatibility_level = 1,
+)
+
+bazel_dep(name = "rules_python", version = "2.0.3")
+bazel_dep(name = "rules_uv", version = "0.86.0")
+
+# rules_nixpkgs lets Bazel import Nix-built packages as Bazel targets. Register
+# the module (pinned) so the option exists — but DO NOT declare a `nix_repo` /
+# `nixpkgs_package` here. Declaring one makes Bazel evaluate Nix at fetch time,
+# which FAILS on machines without `nix` and breaks the build for everyone.
+bazel_dep(name = "rules_nixpkgs_core", version = "0.13.0")
+
+PYTHON_VERSION = "3.12"
+
+python = use_extension("@rules_python//python/extensions:python.bzl", "python")
+python.toolchain(
+    is_default = True,
+    python_version = PYTHON_VERSION,
+)
+
+pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
+pip.parse(
+    hub_name = "pypi",
+    python_version = PYTHON_VERSION,
+    requirements_lock = "//:requirements.lock",
+)
+use_repo(pip, "pypi")

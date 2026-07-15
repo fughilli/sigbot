@@ -1,0 +1,13 @@
+# Direct dependencies only. Regenerate the lock with:
+#   bazel run //:generate_requirements_lock
+# Deps are added per milestone: M2 adds selectolax, M3 adds open_clip_torch
+# (pin torch to CPU wheels then), M4 adds playwright (version must match the
+# nixpkgs playwright-driver in flake.nix — bump together).
+anthropic
+apscheduler>=3.10
+httpx
+pyyaml
+websockets
+
+# Test-only
+pytest

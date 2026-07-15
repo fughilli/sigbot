@@ -1,0 +1,13 @@
+# Static infra config. Copy to config.yaml (gitignored) and fill in.
+# Everything else (location, radius, cadence, queries) is configured by
+# talking to the bot on Signal.
+signal:
+  api_url: http://localhost:8080
+  bot_number: "+1__BOT_GV_NUMBER__"
+  user_number: "+1__YOUR_SIGNAL_NUMBER__"
+db_path: data/bot.db
+anthropic_api_key_env: ANTHROPIC_API_KEY
+agent_model: claude-sonnet-4-6
+sources:
+  craigslist: { enabled: true, site: sfbay }
+  facebook: { enabled: false, profile_dir: .fb-profile/ }

@@ -1,0 +1,17 @@
+# Bazel
+.bazel-disk-cache/
+.bazel-repo-cache/
+.bazelisk/
+bazel-*
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Runtime state (never committed)
+config.yaml
+cache/
+data/
+references/
+.fb-profile/
