@@ -26,3 +26,12 @@ py_test(
         "@pypi//pytest",
     ],
 )
+
+py_test(
+    name = "tools_test",
+    srcs = ["tools_test.py"],
+    deps = [
+        "//finder:finder_lib",
+        "@pypi//pytest",
+    ],
+)
