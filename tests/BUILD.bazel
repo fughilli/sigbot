@@ -10,6 +10,15 @@ py_test(
 )
 
 py_test(
+    name = "listener_test",
+    srcs = ["listener_test.py"],
+    deps = [
+        "//finder:finder_lib",
+        "@pypi//pytest",
+    ],
+)
+
+py_test(
     name = "store_test",
     srcs = ["store_test.py"],
     deps = [

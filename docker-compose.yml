@@ -1,0 +1,16 @@
+# signal-cli-rest-api only; the bot itself runs as a systemd unit
+# (deploy/finder-bot.service) via `bazelisk run //finder:bot`.
+services:
+  signal-api:
+    image: bbernhard/signal-cli-rest-api:latest
+    container_name: signal-api
+    restart: unless-stopped
+    environment:
+      # scripts/setup_signal.py flips this: registration needs `normal`,
+      # service operation (websocket receive) needs `json-rpc`.
+      - MODE=${SIGNAL_API_MODE:-json-rpc}
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      # Back this up (data/backups/) — losing it means re-registering the bot.
+      - ./data/signal-cli:/home/.local/share/signal-cli
