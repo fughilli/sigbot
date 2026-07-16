@@ -13,9 +13,9 @@ hermetic via Bazel. The signal-cli-rest-api service runs either way:
 
 - **With docker** (home box): `docker compose up -d`.
 - **Without docker** (e.g. a dev container that can't nest containers):
-  `scripts/install_native_services.sh` once — installs JRE 25, signal-cli,
-  an arch-correct libsignal, and a source-built signal-cli-rest-api into the
-  gitignored `.deps/` — then `scripts/signal_api.py start`.
+  `nix build .#signal-services -o .nix-services` — signal-cli from nixpkgs
+  plus signal-cli-rest-api built from source, both pinned by `flake.lock` —
+  then `scripts/signal_api.py start`.
 
 `scripts/setup_signal.py` auto-detects which runtime is present.
 
@@ -23,7 +23,7 @@ hermetic via Bazel. The signal-cli-rest-api service runs either way:
 
 ```sh
 bazel test //...                          # should be green out of the box
-docker compose up -d                      #   OR: scripts/install_native_services.sh
+docker compose up -d                      #   OR: nix build .#signal-services -o .nix-services
                                           #       && scripts/signal_api.py start --mode normal
 bazel run //scripts:setup_signal          # guided bot-account registration (§4.7)
 cp config.example.yaml config.yaml        # fill in the two numbers

@@ -8,17 +8,22 @@ aesthetic, configured conversationally over Signal, running on the user's home
 box. Milestones M0–M5 in PLAN.md §7.
 
 ## State of play
-- **Everything can now run inside the dev container** (no docker needed):
+- **Everything runs inside the dev container, Nix-managed** (no docker):
   nested containers are impossible here (seccomp blocks user namespaces —
-  verified), so `scripts/install_native_services.sh` installs JRE 25 +
-  signal-cli 0.14.6 (aarch64 libsignal swapped into the jar) + source-built
-  signal-cli-rest-api 0.100 into `.deps/` (workspace-persistent, gitignored),
-  and `scripts/signal_api.py start|stop|restart --mode normal|json-rpc`
-  replaces docker compose. **Live-verified in this session:** /v1/about,
-  /v1/accounts, group-endpoint error shapes, normal→json-rpc mode switch,
-  daemon TCP socket + REST connect. Services currently left RUNNING in
-  json-rpc mode (pids in data/signal-api/). setup_signal.py auto-detects
-  docker vs native.
+  verified), so the stack runs natively from the flake:
+  `nix build .#signal-services -o .nix-services` → signal-cli 0.14.5
+  (nixpkgs, binary-cached even on aarch64) + signal-cli-rest-api 0.100
+  (buildGoModule in flake.nix; swag pinned to 1.16.4 — nixpkgs' 1.16.6
+  can't parse upstream's annotations). flake.lock committed.
+  `scripts/signal_api.py start|stop|restart --mode normal|json-rpc`
+  replaces docker compose; setup_signal.py auto-detects docker vs native.
+  **Live-verified:** json-rpc mode up from Nix binaries, daemon socket
+  connected, /v1/about + /v1/accounts good. Services left RUNNING in
+  json-rpc mode (pids in data/signal-api/).
+- Nix ships in the BASE container image, but the `default` profile symlink
+  dangles (per-user dirs deleted by the image) so `nix` isn't on PATH; the
+  overlay now repairs the profile (takes effect next container launch).
+  Until then: /nix/store/*-determinate-nix-*/bin/nix.
 - **M0 done** (see `bb2d5ed`): Bazel+Nix scaffold, `bazel test //...` green.
 - **M1 code-complete** (see subsequent commits): store, Signal client/group/
   listener, Claude agent loop + 12 validated tools, live-reschedulable
@@ -41,11 +46,10 @@ box. Milestones M0–M5 in PLAN.md §7.
    captcha + SMS code), then config.yaml + ANTHROPIC_API_KEY, then
    `bazelisk run //finder:finder_bot` → verify M1 exit criterion (create/edit
    a query entirely from Signal).
-2. Generate + commit flake.lock (first machine with nix).
-3. M2: Craigslist fetcher (httpx + selectolax — add selectolax to
+2. M2: Craigslist fetcher (httpx + selectolax — add selectolax to
    requirements.in and regen lock), hard filters, notify path in
    pipeline.run_pass, heartbeat setting. PLAN.md §4.3/§7.
-4. M3: CLIP scoring (open_clip + torch CPU pin), Claude judge.
+3. M3: CLIP scoring (open_clip + torch CPU pin), Claude judge.
 
 ## Open questions / blockers
 - End-to-end Signal verification blocked on home-box access (user runs setup).

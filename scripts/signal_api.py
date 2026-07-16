@@ -10,9 +10,10 @@ Replicates what the docker image's entrypoint does:
 - MODE=json-rpc: write jsonrpc2.yml (account->port map the REST api reads),
   run `signal-cli daemon --tcp 127.0.0.1:6001` plus the REST api.
 
-Binaries come from scripts/install_native_services.sh (.deps prefix).
-Pidfiles/logs live in data/signal-api/. Stdlib only — runnable as
-`python3 scripts/signal_api.py` with no Bazel in the loop.
+Binaries come from the Nix flake:  nix build .#signal-services -o .nix-services
+(signal-cli from nixpkgs + signal-cli-rest-api built from source, both pinned
+by flake.lock). Pidfiles/logs live in data/signal-api/. Stdlib only — runnable
+as `python3 scripts/signal_api.py` with no Bazel in the loop.
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ import urllib.error
 import urllib.request
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-DEPS = REPO / ".deps"
+BIN = REPO / ".nix-services" / "bin"
 DATA = REPO / "data" / "signal-cli"
 RUN = REPO / "data" / "signal-api"
 DAEMON_TCP_PORT = 6001
@@ -62,8 +63,7 @@ def _spawn(name: str, cmd: list[str], env: dict) -> None:
 
 def _env() -> dict:
     env = dict(os.environ)
-    env["PATH"] = f"{DEPS}/bin:{DEPS}/signal-cli/bin:{env.get('PATH', '')}"
-    env["JAVA_HOME"] = str(DEPS / "jre")
+    env["PATH"] = f"{BIN}:{env.get('PATH', '')}"
     return env
 
 
@@ -78,8 +78,8 @@ def _wait_api(timeout_s: int = 60) -> bool:
 
 
 def start(mode: str) -> None:
-    if not (DEPS / "bin/signal-cli-rest-api").exists():
-        sys.exit("binaries missing — run scripts/install_native_services.sh first")
+    if not (BIN / "signal-cli-rest-api").exists():
+        sys.exit("binaries missing — run: nix build .#signal-services -o .nix-services")
     RUN.mkdir(parents=True, exist_ok=True)
     DATA.mkdir(parents=True, exist_ok=True)
     if any(_alive(s) for s in SERVICES):
@@ -96,13 +96,13 @@ def start(mode: str) -> None:
         )
         _spawn(
             "signal-cli-daemon",
-            [str(DEPS / "signal-cli/bin/signal-cli"), "--output=json",
+            [str(BIN / "signal-cli"), "--output=json",
              "--config", str(DATA), "daemon", "--tcp", f"127.0.0.1:{DAEMON_TCP_PORT}"],
             env,
         )
     _spawn(
         "signal-cli-rest-api",
-        [str(DEPS / "bin/signal-cli-rest-api"), f"-signal-cli-config={DATA}"],
+        [str(BIN / "signal-cli-rest-api"), f"-signal-cli-config={DATA}"],
         env,
     )
     if not _wait_api():

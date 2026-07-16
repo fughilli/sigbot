@@ -45,7 +45,7 @@ def _docker_available() -> bool:
 
 
 def _native_available() -> bool:
-    return pathlib.Path(".deps/bin/signal-cli-rest-api").exists()
+    return pathlib.Path(".nix-services/bin/signal-cli-rest-api").exists()
 
 
 def restart_api(mode: str) -> None:
@@ -65,7 +65,7 @@ def restart_api(mode: str) -> None:
             check=True,
         )
     else:
-        fail("no docker and no native install — run scripts/install_native_services.sh")
+        fail("no docker and no native install — run: nix build .#signal-services -o .nix-services")
     for _ in range(30):
         try:
             httpx.get(f"{API}/v1/about", timeout=2)
@@ -97,7 +97,7 @@ def main() -> None:
     if not pathlib.Path("docker-compose.yml").exists():
         fail("run from the repo root (docker-compose.yml not found)")
     if not (_docker_available() or _native_available()):
-        fail("need docker OR a native install (scripts/install_native_services.sh)")
+        fail("need docker OR the nix services build (nix build .#signal-services -o .nix-services)")
 
     bot = normalize_e164(ask("Bot number (the Google Voice number):"))
     user = normalize_e164(ask("Your Signal number (for the hello test):"))
