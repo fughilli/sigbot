@@ -88,7 +88,9 @@ def test_pass_filters_and_notifies(env):
     good = store.get_listing_by_ref(1)
     assert good["outcome"] == "surfaced" and good["notified_at"]
     stages = [j["stage"] for j in good["judgement"]]
-    assert stages == ["hard_filter", "notify"]
+    # no aesthetic target on this query -> clip records an explicit skip
+    assert stages == ["hard_filter", "clip", "notify"]
+    assert "skipped" in good["judgement"][1]["reason"]
 
     # judgement explains each rejection precisely
     pricey = [l for l in store.recent_listings(limit=10) if l["id"] == "craigslist:pricey"][0]

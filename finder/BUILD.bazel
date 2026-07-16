@@ -11,6 +11,8 @@ py_library(
         "@pypi//anthropic",
         "@pypi//apscheduler",
         "@pypi//httpx",
+        "@pypi//open_clip_torch",
+        "@pypi//pillow",
         "@pypi//pyyaml",
         "@pypi//selectolax",
         "@pypi//websockets",
