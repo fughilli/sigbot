@@ -24,13 +24,19 @@ box. Milestones M0–M5 in PLAN.md §7.
   dangles (per-user dirs deleted by the image) so `nix` isn't on PATH; the
   overlay now repairs the profile (takes effect next container launch).
   Until then: /nix/store/*-determinate-nix-*/bin/nix.
-- **M0 done** (see `bb2d5ed`): Bazel+Nix scaffold, `bazel test //...` green.
-- **M1 code-complete** (see subsequent commits): store, Signal client/group/
-  listener, Claude agent loop + 12 validated tools, live-reschedulable
-  APScheduler, setup_signal script, systemd unit, README. 5/5 test targets
-  green. **Not yet verified end-to-end** — that needs the home box (docker +
-  a GV number). M1 exit criterion (create/edit a query entirely from Signal)
-  is still open until then.
+- **M0, M1 done and user-verified**: bot account +15555550100 registered
+  (backup in data/backups/), group live, user configured a real query
+  (mcm-dining-chairs, 94103, 20mi) entirely from Signal chat. User is
+  identified by ACI uuid (see config.yaml, gitignored; API key at
+  credentials/anthropic.key, gitignored).
+- **M2 + dashboard done** (see `c691c45`, `66efbe5`): Craigslist fetcher
+  (static-markup parser, live fixtures), judgement-trail pipeline, web
+  dashboard on 127.0.0.1:8090 (browser access from host needs the next
+  container relaunch to pick up overlay.json's port 8090). No real pass
+  has run yet.
+- **Bot is RUNNING in tmux window `finder-bot`** (bazelisk run
+  //finder:finder_bot with ANTHROPIC_API_KEY from credentials/). Signal
+  services run natively via scripts/signal_api.py (json-rpc mode).
 - `flake.lock` is NOT generated yet — no nix in this dev container until the
   overlay (committed in M0) takes effect on next container launch. Run
   `nix flake lock` then commit it.
@@ -41,15 +47,15 @@ box. Milestones M0–M5 in PLAN.md §7.
 - pipeline.run_pass is an M1 stub — reports "no fetchers enabled yet".
 
 ## Next up
-1. Register the bot account — can now happen IN THIS CONTAINER:
-   `bazel run //scripts:setup_signal` (needs the user for GV number +
-   captcha + SMS code), then config.yaml + ANTHROPIC_API_KEY, then
-   `bazelisk run //finder:finder_bot` → verify M1 exit criterion (create/edit
-   a query entirely from Signal).
-2. M2: Craigslist fetcher (httpx + selectolax — add selectolax to
-   requirements.in and regen lock), hard filters, notify path in
-   pipeline.run_pass, heartbeat setting. PLAN.md §4.3/§7.
-3. M3: CLIP scoring (open_clip + torch CPU pin), Claude judge.
+1. First REAL scrape pass: user texts the bot "run now" (query
+   mcm-dining-chairs / 94103 / 20mi is live) and watches the dashboard
+   live feed. Expect parser fixups if real-world listings differ from
+   fixtures.
+2. M3: CLIP scoring (open_clip + torch CPU pin in requirements.in),
+   Claude judge — pipeline already has the stage slot + dashboard
+   renders clip/judge stages (score/threshold/reason fields).
+3. Heartbeat setting ("checked N, 0 matches" daily) — deferred from M2.
+4. M4: FBM Playwright fetcher (+ playwright-driver.browsers in flake).
 
 ## Open questions / blockers
 - End-to-end Signal verification blocked on home-box access (user runs setup).
