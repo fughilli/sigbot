@@ -10,10 +10,12 @@ Replicates what the docker image's entrypoint does:
 - MODE=json-rpc: write jsonrpc2.yml (account->port map the REST api reads),
   run `signal-cli daemon --tcp 127.0.0.1:6001` plus the REST api.
 
-Binaries come from the Nix flake:  nix build .#signal-services -o .nix-services
-(signal-cli from nixpkgs + signal-cli-rest-api built from source, both pinned
-by flake.lock). Pidfiles/logs live in data/signal-api/. Stdlib only — runnable
-as `python3 scripts/signal_api.py` with no Bazel in the loop.
+Binaries: preferred source is the Nix flake (`nix build .#signal-services -o
+.nix-services`); fallback is the curl installer's `.deps/` prefix
+(scripts/install_native_services.sh) for containers whose base image lacks
+nix — /nix/store does NOT survive a container relaunch, but the workspace
+does. Pidfiles/logs live in data/signal-api/. Stdlib only — runnable as
+`python3 scripts/signal_api.py` with no Bazel in the loop.
 """
 
 from __future__ import annotations
@@ -29,13 +31,26 @@ import urllib.error
 import urllib.request
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-BIN = REPO / ".nix-services" / "bin"
 DATA = REPO / "data" / "signal-cli"
 RUN = REPO / "data" / "signal-api"
 DAEMON_TCP_PORT = 6001
 API_PORT = 8080
 
 SERVICES = ("signal-cli-daemon", "signal-cli-rest-api")
+
+
+def resolve_binaries() -> dict | None:
+    """Nix build result first, curl-installer .deps fallback second."""
+    nix = REPO / ".nix-services" / "bin"
+    if (nix / "signal-cli-rest-api").exists():
+        return {"signal_cli": nix / "signal-cli",
+                "rest_api": nix / "signal-cli-rest-api", "env": {}}
+    deps = REPO / ".deps"
+    if (deps / "bin" / "signal-cli-rest-api").exists():
+        return {"signal_cli": deps / "signal-cli" / "bin" / "signal-cli",
+                "rest_api": deps / "bin" / "signal-cli-rest-api",
+                "env": {"JAVA_HOME": str(deps / "jre")}}
+    return None
 
 
 def _pidfile(name: str) -> pathlib.Path:
@@ -61,9 +76,10 @@ def _spawn(name: str, cmd: list[str], env: dict) -> None:
     print(f"  {name}: pid {proc.pid} (log: {RUN}/{name}.log)")
 
 
-def _env() -> dict:
+def _env(binaries: dict) -> dict:
     env = dict(os.environ)
-    env["PATH"] = f"{BIN}:{env.get('PATH', '')}"
+    env.update(binaries["env"])
+    env["PATH"] = f"{binaries['rest_api'].parent}:{env.get('PATH', '')}"
     return env
 
 
@@ -78,14 +94,16 @@ def _wait_api(timeout_s: int = 60) -> bool:
 
 
 def start(mode: str) -> None:
-    if not (BIN / "signal-cli-rest-api").exists():
-        sys.exit("binaries missing — run: nix build .#signal-services -o .nix-services")
+    binaries = resolve_binaries()
+    if binaries is None:
+        sys.exit("binaries missing — run `nix build .#signal-services -o .nix-services`"
+                 " or scripts/install_native_services.sh")
     RUN.mkdir(parents=True, exist_ok=True)
     DATA.mkdir(parents=True, exist_ok=True)
     if any(_alive(s) for s in SERVICES):
         sys.exit("already running (use restart)")
 
-    env = _env()
+    env = _env(binaries)
     env["MODE"] = mode
     print(f"starting signal api natively, MODE={mode}")
     if mode == "json-rpc":
@@ -96,13 +114,13 @@ def start(mode: str) -> None:
         )
         _spawn(
             "signal-cli-daemon",
-            [str(BIN / "signal-cli"), "--output=json",
+            [str(binaries["signal_cli"]), "--output=json",
              "--config", str(DATA), "daemon", "--tcp", f"127.0.0.1:{DAEMON_TCP_PORT}"],
             env,
         )
     _spawn(
         "signal-cli-rest-api",
-        [str(BIN / "signal-cli-rest-api"), f"-signal-cli-config={DATA}"],
+        [str(binaries["rest_api"]), f"-signal-cli-config={DATA}"],
         env,
     )
     if not _wait_api():

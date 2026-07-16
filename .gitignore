@@ -19,3 +19,7 @@ references/
 
 # Credentials (SSH keys, API keys)
 credentials/
+
+# nix build result symlinks
+result
+.deps/

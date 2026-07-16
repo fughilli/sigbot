@@ -12,7 +12,7 @@ Wants=network-online.target
 User=finder
 WorkingDirectory=/opt/signal-ai-bot
 EnvironmentFile=/etc/finder-bot.env
-ExecStart=/usr/local/bin/bazelisk run //finder:finder_bot
+ExecStart=/usr/local/bin/bazelisk run //finder:finder_bot -- --workdir /opt/signal-ai-bot
 Restart=on-failure
 RestartSec=10
 

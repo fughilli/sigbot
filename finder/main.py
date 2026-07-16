@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import functools
 import logging
@@ -30,13 +31,9 @@ _ONBOARDING = (
 )
 
 
-async def run() -> None:
+async def run(config_path: str) -> None:
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
-    # `bazel run` starts us in the runfiles tree; config.yaml, data/ and
-    # references/ are all resolved relative to the invocation directory.
-    if os.environ.get("BUILD_WORKING_DIRECTORY"):
-        os.chdir(os.environ["BUILD_WORKING_DIRECTORY"])
-    config = config_mod.load(os.environ.get("FINDER_CONFIG", "config.yaml"))
+    config = config_mod.load(config_path)
     store = Store(config.db_path)
     client = SignalClient(config.signal.api_url, config.signal.bot_number)
 
@@ -67,7 +64,25 @@ async def run() -> None:
 
 
 def main() -> None:
-    asyncio.run(run())
+    parser = argparse.ArgumentParser(
+        description="Furniture finder Signal bot",
+        epilog="All persistent artifacts (config.yaml, data/, references/, "
+               "cache/) live under --workdir.",
+    )
+    parser.add_argument(
+        "--workdir",
+        default=os.environ.get("BUILD_WORKING_DIRECTORY") or ".",
+        help="directory holding persistent state; must survive container "
+             "restarts (default: bazel invocation dir, else cwd)",
+    )
+    parser.add_argument(
+        "--config",
+        default=os.environ.get("FINDER_CONFIG", "config.yaml"),
+        help="static config file, resolved relative to --workdir",
+    )
+    args = parser.parse_args()
+    os.chdir(args.workdir)
+    asyncio.run(run(args.config))
 
 
 if __name__ == "__main__":

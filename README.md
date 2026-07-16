@@ -28,8 +28,12 @@ docker compose up -d                      #   OR: nix build .#signal-services -o
 bazel run //scripts:setup_signal          # guided bot-account registration (§4.7)
 cp config.example.yaml config.yaml        # fill in the two numbers
 export ANTHROPIC_API_KEY=...
-bazel run //finder:finder_bot
+bazel run //finder:finder_bot -- --workdir "$PWD"
 ```
+
+`--workdir` anchors everything that must survive container restarts
+(config.yaml, `data/` incl. the SQLite DB and Signal account data,
+`references/`, `cache/`); point it at a bind-mounted/persistent path.
 
 On first start the bot creates the "🛋 Furniture Finder" Signal group with you
 in it and walks you through your first search. Everything after that —
