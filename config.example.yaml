@@ -13,3 +13,4 @@ agent_model: claude-sonnet-4-6
 sources:
   craigslist: { enabled: true, site: sfbay }
   facebook: { enabled: false, profile_dir: .fb-profile/ }
+dashboard: { enabled: true, host: 127.0.0.1, port: 8090 }

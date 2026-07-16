@@ -27,6 +27,8 @@ class Config:
     anthropic_api_key_env: str = "ANTHROPIC_API_KEY"
     agent_model: str = "claude-sonnet-4-6"
     sources: dict = dataclasses.field(default_factory=dict)
+    dashboard: dict = dataclasses.field(
+        default_factory=lambda: {"enabled": True, "host": "127.0.0.1", "port": 8090})
 
     @property
     def anthropic_api_key(self) -> str:
@@ -49,4 +51,5 @@ def load(path: str | pathlib.Path = "config.yaml") -> Config:
         anthropic_api_key_env=raw.get("anthropic_api_key_env", "ANTHROPIC_API_KEY"),
         agent_model=raw.get("agent_model", "claude-sonnet-4-6"),
         sources=raw.get("sources", {"craigslist": {"enabled": True}, "facebook": {"enabled": False}}),
+        dashboard={"enabled": True, "host": "127.0.0.1", "port": 8090, **raw.get("dashboard", {})},
     )

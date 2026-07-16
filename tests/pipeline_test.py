@@ -109,6 +109,20 @@ def test_second_pass_is_all_dedup(env):
     assert len(signal.sent) == 1  # no duplicate ping
 
 
+def test_hard_filter_phrase_keywords():
+    spec = {"keywords": ["mid century dining chairs"], "max_price": 500}
+    listing = {"title": "Dining chairs, mid-century walnut", "price": 200.0,
+               "description": "set of 4", "image_urls": ["http://i/1.jpg"]}
+    passed, checks = pipeline.hard_filter(listing, spec)
+    assert passed, checks
+    assert "matched" in checks["keywords"]
+
+    listing["title"] = "Office desk"
+    listing["description"] = "plain desk"
+    passed, checks = pipeline.hard_filter(listing, spec)
+    assert not passed and checks["keywords"].startswith("reject")
+
+
 def test_pass_skips_without_location(tmp_path):
     store = Store(tmp_path / "e.db")
     config = Config(

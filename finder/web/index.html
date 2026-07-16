@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>🛋 Furniture Finder</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --bg:#111418; --card:#1b2027; --ink:#e8e6e1; --dim:#8a93a0;
+          --ok:#4ade80; --bad:#f87171; --warn:#fbbf24; --line:#2a313b; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:14px/1.5 ui-sans-serif, system-ui, sans-serif; }
+  header { padding:14px 22px; border-bottom:1px solid var(--line);
+           display:flex; gap:24px; align-items:baseline; flex-wrap:wrap; }
+  header h1 { font-size:17px; margin:0; }
+  header .stat { color:var(--dim); font-size:13px; }
+  header .stat b { color:var(--ink); font-weight:600; }
+  main { display:grid; grid-template-columns: 300px 1fr; gap:18px;
+         padding:18px 22px; max-width:1400px; }
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.08em;
+       color:var(--dim); margin:0 0 10px; }
+  #feed { background:var(--card); border:1px solid var(--line); border-radius:10px;
+          padding:12px; height:calc(100vh - 130px); overflow-y:auto; }
+  #feed .ev { padding:5px 0; border-bottom:1px solid var(--line);
+              font-size:12.5px; color:var(--dim); }
+  #feed .ev b { color:var(--ink); font-weight:500; }
+  #feed .ev .t { color:#5c6672; margin-right:6px; font-size:11px; }
+  .controls { display:flex; gap:10px; margin-bottom:12px; }
+  select { background:var(--card); color:var(--ink); border:1px solid var(--line);
+           border-radius:6px; padding:4px 8px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px;
+          padding:12px 14px; margin-bottom:10px; display:flex; gap:14px; }
+  .card img { width:96px; height:72px; object-fit:cover; border-radius:6px;
+              background:#0c0f12; flex:none; }
+  .card .noimg { width:96px; height:72px; border-radius:6px; background:#0c0f12;
+                 display:flex; align-items:center; justify-content:center;
+                 color:#3a434e; font-size:24px; flex:none; }
+  .card .body { min-width:0; flex:1; }
+  .card .title { font-weight:600; }
+  .card .title a { color:var(--ink); text-decoration:none; }
+  .card .title a:hover { text-decoration:underline; }
+  .meta { color:var(--dim); font-size:12.5px; margin-top:2px; }
+  .badge { display:inline-block; padding:1px 8px; border-radius:99px;
+           font-size:11.5px; font-weight:600; margin-left:8px; vertical-align:1px; }
+  .b-surfaced { background:#12351f; color:var(--ok); }
+  .b-rejected_filter, .b-rejected_clip, .b-rejected_judge { background:#3a1717; color:var(--bad); }
+  .b-pending { background:#3a2f12; color:var(--warn); }
+  details { margin-top:8px; }
+  summary { cursor:pointer; color:var(--dim); font-size:12.5px; user-select:none; }
+  .stage { margin:6px 0 0 12px; padding:8px 10px; border-left:2px solid var(--line);
+           font-size:12.5px; }
+  .stage .sname { font-weight:600; }
+  .stage .ok { color:var(--ok); } .stage .no { color:var(--bad); }
+  .stage ul { margin:4px 0 0; padding-left:16px; color:var(--dim); }
+  .stage li.rej { color:var(--bad); }
+</style>
+</head>
+<body>
+<header>
+  <h1>🛋 Furniture Finder</h1>
+  <span class="stat">last run <b id="lastrun">–</b></span>
+  <span class="stat">next run <b id="nextrun">–</b></span>
+  <span class="stat">every <b id="cadence">–</b></span>
+  <span class="stat" id="counts"></span>
+  <span class="stat" id="live" style="color:var(--warn)">● connecting…</span>
+</header>
+<main>
+  <section>
+    <h2>Live activity</h2>
+    <div id="feed"></div>
+  </section>
+  <section>
+    <h2>Results</h2>
+    <div class="controls">
+      <select id="f-outcome">
+        <option value="">all outcomes</option>
+        <option value="surfaced">surfaced</option>
+        <option value="rejected_filter">rejected: hard filter</option>
+        <option value="rejected_clip">rejected: aesthetic score</option>
+        <option value="rejected_judge">rejected: judge</option>
+        <option value="pending">pending</option>
+      </select>
+      <select id="f-query"><option value="">all queries</option></select>
+    </div>
+    <div id="results"></div>
+  </section>
+</main>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => (s ?? "").toString().replace(/[&<>"]/g,
+  (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const rel = (iso) => iso ? new Date(iso).toLocaleString() : "–";
+
+const STAGE_LABELS = {hard_filter: "Hard filter (price / keywords / photos)",
+                      clip: "Aesthetic similarity (CLIP)",
+                      judge: "Claude judge", notify: "Notification"};
+
+function stageHtml(j) {
+  const ok = j.outcome === "pass" || j.outcome === "surfaced";
+  let checks = "";
+  if (j.checks) {
+    checks = "<ul>" + Object.entries(j.checks).map(([k, v]) =>
+      `<li class="${v.startsWith("reject") ? "rej" : ""}">${esc(k)}: ${esc(v)}</li>`).join("") + "</ul>";
+  }
+  const extra = [];
+  if (j.score !== undefined) extra.push(`score ${j.score}`);
+  if (j.threshold !== undefined) extra.push(`threshold ${j.threshold}`);
+  if (j.reason) extra.push(esc(j.reason));
+  return `<div class="stage"><span class="sname ${ok ? "ok" : "no"}">
+    ${esc(STAGE_LABELS[j.stage] || j.stage)}: ${esc(j.outcome)}</span>
+    ${extra.length ? " — " + extra.join(", ") : ""}${checks}</div>`;
+}
+
+function card(l) {
+  const img = (l.image_urls && l.image_urls[0])
+    ? `<img src="${esc(l.image_urls[0])}" loading="lazy">`
+    : `<div class="noimg">🛋</div>`;
+  const price = l.price != null ? "$" + Math.round(l.price) : "$?";
+  const judgement = (l.judgement || []).map(stageHtml).join("") ||
+    `<div class="stage"><span class="sname">no judgement recorded yet</span></div>`;
+  return `<div class="card">${img}<div class="body">
+    <div class="title"><a href="${esc(l.url)}" target="_blank">#${l.short_ref} · ${price} — ${esc(l.title)}</a>
+      <span class="badge b-${esc(l.outcome || "pending")}">${esc(l.outcome || "pending")}</span></div>
+    <div class="meta">${esc(l.source)} · ${esc(l.location_text || "")} ·
+      query ${esc(l.query_name || "?")} · seen ${rel(l.first_seen_at)}
+      ${l.feedback ? " · feedback: " + esc(l.feedback) : ""}</div>
+    <details><summary>judgement</summary>${judgement}</details>
+  </div></div>`;
+}
+
+async function refreshStatus() {
+  const s = await (await fetch("api/status")).json();
+  $("#lastrun").textContent = s.last_run ? rel(s.last_run.at) : "never";
+  $("#nextrun").textContent = s.next_run ? rel(s.next_run) : "–";
+  $("#cadence").textContent = s.cadence_minutes + " min";
+  $("#counts").innerHTML = Object.entries(s.outcomes || {})
+    .map(([k, v]) => `${esc(k)} <b>${v}</b>`).join(" · ");
+  const sel = $("#f-query"), cur = sel.value;
+  sel.innerHTML = '<option value="">all queries</option>' + (s.queries || [])
+    .map((q) => `<option ${q.name === cur ? "selected" : ""}>${esc(q.name)}</option>`).join("");
+}
+
+async function refreshResults() {
+  const p = new URLSearchParams();
+  if ($("#f-outcome").value) p.set("outcome", $("#f-outcome").value);
+  if ($("#f-query").value) p.set("query", $("#f-query").value);
+  const d = await (await fetch("api/listings?" + p)).json();
+  $("#results").innerHTML = d.listings.map(card).join("") ||
+    '<div class="meta">nothing yet — waiting for the next scrape pass</div>';
+}
+
+const FEED_VERBS = {
+  "pass.start": (e) => `pass started (${(e.sources || []).join(", ")}) for ${(e.queries || []).join(", ")}`,
+  "pass.skipped": (e) => `pass skipped: ${e.reason}`,
+  "search.done": (e) => `<b>${e.source}</b> search "${e.query}": ${e.results} results`,
+  "listing.new": (e) => `new: <b>#${e.short_ref} ${esc(e.title)}</b> ($${e.price ?? "?"})`,
+  "listing.judged": (e) => `#${e.short_ref} ${e.stage}: <b>${e.outcome}</b>`,
+  "listing.surfaced": (e) => `📣 surfaced <b>#${e.short_ref} ${esc(e.title)}</b>`,
+  "listing.repost": (e) => `repost skipped: ${esc(e.title)}`,
+  "source.error": (e) => `⚠️ ${e.source} error: ${esc(e.error)}`,
+  "pass.end": (e) => `pass done — ${e.fetched} fetched, ${e.new} new, ${e.surfaced} surfaced, ${e.rejected} rejected`,
+};
+
+function connectFeed() {
+  const es = new EventSource("events");
+  es.onopen = () => { const l = $("#live"); l.textContent = "● live"; l.style.color = "var(--ok)"; };
+  es.onerror = () => { const l = $("#live"); l.textContent = "● reconnecting…"; l.style.color = "var(--warn)"; };
+  es.onmessage = (m) => {
+    const e = JSON.parse(m.data);
+    const div = document.createElement("div");
+    div.className = "ev";
+    div.innerHTML = `<span class="t">${new Date(e.at).toLocaleTimeString()}</span>` +
+      ((FEED_VERBS[e.type] || ((x) => x.type))(e));
+    const feed = $("#feed");
+    feed.prepend(div);
+    while (feed.children.length > 300) feed.lastChild.remove();
+    if (e.type === "pass.end" || e.type === "listing.judged") { refreshResults(); refreshStatus(); }
+  };
+}
+
+$("#f-outcome").onchange = refreshResults;
+$("#f-query").onchange = refreshResults;
+refreshStatus(); refreshResults(); connectFeed();
+setInterval(refreshStatus, 60000);
+</script>
+</body>
+</html>

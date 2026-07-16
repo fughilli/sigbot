@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 
 from finder.config import Config
 from finder.events import EventBus
@@ -44,12 +45,20 @@ def hard_filter(listing: dict, spec: dict) -> tuple[bool, dict]:
     else:
         checks["price"] = "pass"
 
+    # A keyword "phrase" matches if all its words appear somewhere in the
+    # title+description (any order) — verbatim substring would wrongly reject
+    # e.g. "mid century dining chairs" against "dining chairs, mid-century".
     keywords = [k.lower() for k in spec.get("keywords", [])]
-    haystack = f"{listing.get('title', '')} {listing.get('description', '')}".lower()
-    if keywords and not any(k in haystack for k in keywords):
-        checks["keywords"] = f"reject: none of {keywords} in title/description"
+    haystack = re.sub(r"[^a-z0-9 ]", " ",
+                      f"{listing.get('title', '')} {listing.get('description', '')}".lower())
+    words = set(haystack.split())
+    def phrase_hits(phrase: str) -> bool:
+        return all(w in words for w in re.sub(r"[^a-z0-9 ]", " ", phrase).split())
+    if keywords and not any(phrase_hits(k) for k in keywords):
+        checks["keywords"] = f"reject: no keyword phrase fully present in title/description"
     else:
-        checks["keywords"] = "pass"
+        matched = [k for k in keywords if phrase_hits(k)]
+        checks["keywords"] = f"pass (matched: {', '.join(matched) or 'no keywords set'})"
 
     if not listing.get("image_urls"):
         checks["images"] = "reject: no photos (nothing to judge aesthetics on)"

@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 py_library(
     name = "finder_lib",
     srcs = glob(["**/*.py"], exclude = ["main.py"]),
+    data = ["web/index.html"],
     deps = [
         "@pypi//aiohttp",
         "@pypi//anthropic",

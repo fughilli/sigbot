@@ -17,6 +17,7 @@ from finder.notify.groups import ensure_finder_group
 from finder.notify.signal import SignalClient
 from finder.scheduler import ScrapeScheduler
 from finder.store import Store
+from finder.web.server import start_dashboard
 
 log = logging.getLogger(__name__)
 
@@ -54,6 +55,10 @@ async def run() -> None:
     agent = Agent(config, store, client, group, tools)
 
     scheduler.start()
+    if config.dashboard.get("enabled"):
+        await start_dashboard(store, bus, scheduler,
+                              host=config.dashboard["host"],
+                              port=config.dashboard["port"])
     if not store.get_setting("onboarded"):
         await client.send(group["send_id"], _ONBOARDING)
         store.set_setting("onboarded", True)
