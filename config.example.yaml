@@ -12,5 +12,9 @@ anthropic_api_key_env: ANTHROPIC_API_KEY
 agent_model: claude-sonnet-4-6
 sources:
   craigslist: { enabled: true, site: sfbay }
+  # Facebook Marketplace (M4): needs a one-time interactive login
+  # (scripts/fb_login.py) into profile_dir, and the nix playwright browsers
+  # (nix build .#playwright-browsers -o .playwright-browsers). Best effort —
+  # a login wall trips a 24h circuit breaker and pings the group.
   facebook: { enabled: false, profile_dir: .fb-profile/ }
 dashboard: { enabled: true, host: 0.0.0.0, port: 8090 }  # 0.0.0.0: published ports reach the container eth0, not its loopback

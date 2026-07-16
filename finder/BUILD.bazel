@@ -13,6 +13,7 @@ py_library(
         "@pypi//httpx",
         "@pypi//open_clip_torch",
         "@pypi//pillow",
+        "@pypi//playwright",
         "@pypi//pyyaml",
         "@pypi//selectolax",
         "@pypi//websockets",

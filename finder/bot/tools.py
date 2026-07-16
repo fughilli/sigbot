@@ -33,6 +33,9 @@ TOOL_DEFS: list[dict] = [
                 "postal": {"type": "string"},
                 "craigslist_site": {"type": "string"},
                 "radius_miles": {"type": "number"},
+                "latitude": {"type": "number",
+                             "description": "optional; sharpens Facebook Marketplace radius search"},
+                "longitude": {"type": "number", "description": "optional; pairs with latitude"},
             },
             "required": ["postal", "radius_miles"],
         },
@@ -171,7 +174,8 @@ class Tools:
             "queries": self.store.list_queries(),
         }
 
-    def _t_set_location(self, postal: str, radius_miles: float, craigslist_site: str = "") -> dict:
+    def _t_set_location(self, postal: str, radius_miles: float, craigslist_site: str = "",
+                        latitude: float | None = None, longitude: float | None = None) -> dict:
         if not re.fullmatch(r"\d{5}", postal):
             raise ValueError("postal must be a 5-digit US zip")
         if not 1 <= radius_miles <= 100:
@@ -182,6 +186,12 @@ class Tools:
             if not re.fullmatch(r"[a-z]+", craigslist_site):
                 raise ValueError("craigslist_site must be a lowercase slug like 'sfbay'")
             loc["craigslist_site"] = craigslist_site
+        if latitude is not None or longitude is not None:
+            if latitude is None or longitude is None:
+                raise ValueError("latitude and longitude must be set together")
+            if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
+                raise ValueError("latitude/longitude out of range")
+            loc["lat"], loc["lon"] = latitude, longitude
         self.store.set_setting("location", loc)
         return {"ok": True, "location": loc}
 

@@ -1,13 +1,14 @@
 # Direct dependencies only. Regenerate the lock with:
 #   bazel run //:generate_requirements_lock
-# Deps are added per milestone (M4 adds playwright — version must match the
-# nixpkgs playwright-driver in flake.nix; bump together).
+# playwright is pinned to match the nixpkgs playwright-driver in flake.nix;
+# bump both together (the nix package supplies the actual Chromium binary).
 aiohttp
 anthropic
 apscheduler>=3.10
 httpx
 open_clip_torch
 pillow
+playwright==1.61.0
 pyyaml
 selectolax
 websockets

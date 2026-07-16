@@ -5,3 +5,9 @@ py_binary(
     srcs = ["setup_signal.py"],
     deps = ["@pypi//httpx"],
 )
+
+py_binary(
+    name = "fb_login",
+    srcs = ["fb_login.py"],
+    deps = ["@pypi//playwright"],
+)

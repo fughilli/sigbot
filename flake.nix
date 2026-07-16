@@ -63,18 +63,24 @@
         packages = {
           inherit signal-cli-rest-api signal-services;
           default = signal-services;
+          # Pinned Chromium + system libs for Playwright (FBM fetcher). The pip
+          # `playwright` pin in requirements.in (1.61.0) MUST match nixpkgs'
+          # python playwright (also 1.61.0 — the driver package's own version
+          # string is 1.61.1, ignore it). Bump both together. Build with:
+          #   nix build .#playwright-browsers -o .playwright-browsers
+          # then export PLAYWRIGHT_BROWSERS_PATH=$PWD/.playwright-browsers and
+          # PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=true (the systemd unit
+          # and scripts/fb_login.py do this).
+          playwright-browsers = pkgs.playwright-driver.browsers;
         };
 
-        # M4 will add pkgs.playwright-driver.browsers here; the pip `playwright`
-        # pin in requirements.in must match nixpkgs' playwright-driver version —
-        # bump them together. The systemd unit then exports
-        # PLAYWRIGHT_BROWSERS_PATH and PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS.
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
             bazelisk
             gallery-dl
           ];
-          inputsFrom = [ ];
+          PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";
+          PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true";
         };
       });
 }

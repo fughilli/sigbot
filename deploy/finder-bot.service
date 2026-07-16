@@ -2,7 +2,10 @@
 #   sudo cp deploy/finder-bot.service /etc/systemd/system/
 #   sudo systemctl enable --now finder-bot
 # Expects the repo at /opt/signal-ai-bot and /etc/finder-bot.env containing
-# ANTHROPIC_API_KEY=... (chmod 600). M4 adds PLAYWRIGHT_BROWSERS_PATH here.
+# ANTHROPIC_API_KEY=... (chmod 600), and for the Facebook fetcher:
+#   PLAYWRIGHT_BROWSERS_PATH=/opt/signal-ai-bot/.playwright-browsers
+#   PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=true
+# (build once: nix build .#playwright-browsers -o .playwright-browsers)
 [Unit]
 Description=Furniture finder Signal bot
 After=network-online.target docker.service

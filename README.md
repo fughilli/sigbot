@@ -40,6 +40,22 @@ in it and walks you through your first search. Everything after that —
 location, radius, price caps, cadence, reference photos — is configured by
 talking to it.
 
+## Facebook Marketplace (optional)
+
+Off by default. To enable:
+
+```sh
+nix build .#playwright-browsers -o .playwright-browsers
+export PLAYWRIGHT_BROWSERS_PATH="$PWD/.playwright-browsers"
+export PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=true
+bazel run //scripts:fb_login          # log in by hand (headed browser)
+```
+
+Then tell the bot to enable Facebook (or set `sources.facebook.enabled: true`).
+Meta's anti-bot is aggressive — a login wall trips a 24h circuit breaker and
+pings the group to re-run `fb_login`. Best run from the home box's residential
+IP.
+
 ## Development
 
 - `bazel test //...` — full suite.

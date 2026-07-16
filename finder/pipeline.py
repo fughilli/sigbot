@@ -116,6 +116,17 @@ async def run_pass(config: Config, store: Store, client: SignalClient,
     fetchers = []
     if config.sources.get("craigslist", {}).get("enabled"):
         fetchers.append(CraigslistFetcher())
+    fb = None
+    fb_cfg = config.sources.get("facebook", {})
+    if fb_cfg.get("enabled"):
+        from finder.fetchers.facebook import Circuit, FacebookFetcher
+        open_, reason = Circuit(store).is_open()
+        if open_:
+            log.info("facebook source in cooldown: %s", reason)
+            emit("source.circuit_open", source="facebook", reason=reason)
+        else:
+            fb = FacebookFetcher(store, profile_dir=fb_cfg.get("profile_dir", ".fb-profile"))
+            fetchers.append(fb)
 
     summary = {"fetched": 0, "new": 0, "rejected": 0, "surfaced": 0, "errors": 0}
     emit("pass.start", queries=[q["name"] for q in queries],
@@ -155,6 +166,19 @@ async def run_pass(config: Config, store: Store, client: SignalClient,
             try:
                 rows = await fetcher.search(location, spec)
             except Exception as e:
+                # A Facebook login wall trips the circuit breaker (disable the
+                # source for a cooldown) and tells the user once, rather than
+                # retrying into a lockout. Detected by class name so the
+                # pipeline needn't import playwright.
+                if type(e).__name__ == "CheckpointError" and fb is not None:
+                    fb.circuit.trip(str(e))
+                    await client.send(
+                        group["send_id"],
+                        "⚠️ Facebook wants a manual login — Marketplace "
+                        "paused for 24h. Run scripts/fb_login.py on the box when "
+                        "convenient, then tell me to retry Facebook.")
+                    emit("source.checkpoint", source="facebook", error=str(e))
+                    break  # stop hitting FB entirely this pass
                 log.exception("search failed: %s/%s", fetcher.name, query["name"])
                 emit("source.error", source=fetcher.name, query=query["name"], error=str(e))
                 summary["errors"] += 1
@@ -296,6 +320,9 @@ async def run_pass(config: Config, store: Store, client: SignalClient,
                                  reason=verdict["reason"])
                 else:
                     summary["rejected"] += 1
+
+    if fb is not None:
+        await fb.close()
 
     emit("pass.end", **summary)
     log.info("pass done: %s", summary)

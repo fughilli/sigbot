@@ -29,6 +29,15 @@ py_test(
 )
 
 py_test(
+    name = "facebook_test",
+    srcs = ["facebook_test.py"],
+    deps = [
+        "//finder:finder_lib",
+        "@pypi//pytest",
+    ],
+)
+
+py_test(
     name = "match_test",
     srcs = ["match_test.py"],
     deps = [
