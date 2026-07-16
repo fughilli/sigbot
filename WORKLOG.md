@@ -47,15 +47,15 @@ box. Milestones M0–M5 in PLAN.md §7.
 - pipeline.run_pass is an M1 stub — reports "no fetchers enabled yet".
 
 ## Next up
-1. First REAL scrape pass: user texts the bot "run now" (query
-   mcm-dining-chairs / 94103 / 20mi is live) and watches the dashboard
-   live feed. Expect parser fixups if real-world listings differ from
-   fixtures.
-2. M3: CLIP scoring (open_clip + torch CPU pin in requirements.in),
-   Claude judge — pipeline already has the stage slot + dashboard
-   renders clip/judge stages (score/threshold/reason fields).
-3. Heartbeat setting ("checked N, 0 matches" daily) — deferred from M2.
-4. M4: FBM Playwright fetcher (+ playwright-driver.browsers in flake).
+1. M3 shipped but NOT yet exercised on a real pass. User should send the
+   bot reference photos ("here are inspo pics" + attachments -> stored in
+   references/mcm-dining-chairs/) and/or confirm the query has an
+   aesthetic_description, then "run now". First scored pass downloads
+   CLIP weights (~600MB, one-time, cache/models/). Watch judgement
+   trails on the dashboard; tune clip_threshold from near-misses.
+2. Heartbeat setting ("checked N, 0 matches" daily) — deferred from M2.
+3. M4: FBM Playwright fetcher (+ playwright-driver.browsers in flake,
+   pip playwright pinned to match).
 
 ## Open questions / blockers
 - End-to-end Signal verification blocked on home-box access (user runs setup).
