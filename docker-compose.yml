@@ -2,7 +2,8 @@
 # (deploy/finder-bot.service) via `bazelisk run //finder:bot`.
 services:
   signal-api:
-    image: bbernhard/signal-cli-rest-api:latest
+    # Keep in lockstep with the flake's signal-cli-rest-api version.
+    image: bbernhard/signal-cli-rest-api:0.100
     container_name: signal-api
     restart: unless-stopped
     environment:
