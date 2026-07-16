@@ -30,6 +30,10 @@ _ONBOARDING = (
 
 async def run() -> None:
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
+    # `bazel run` starts us in the runfiles tree; config.yaml, data/ and
+    # references/ are all resolved relative to the invocation directory.
+    if os.environ.get("BUILD_WORKING_DIRECTORY"):
+        os.chdir(os.environ["BUILD_WORKING_DIRECTORY"])
     config = config_mod.load(os.environ.get("FINDER_CONFIG", "config.yaml"))
     store = Store(config.db_path)
     client = SignalClient(config.signal.api_url, config.signal.bot_number)

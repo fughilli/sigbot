@@ -16,3 +16,6 @@ data/
 references/
 .fb-profile/
 .nix-services
+
+# Credentials (SSH keys, API keys)
+credentials/

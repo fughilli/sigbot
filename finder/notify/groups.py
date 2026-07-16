@@ -31,12 +31,13 @@ async def ensure_finder_group(client: SignalClient, store: Store, user_id: str) 
 
     log.info("creating group %r", FINDER_GROUP_NAME)
     created = await client.create_group(FINDER_GROUP_NAME, members=[user_id])
-    internal_id = created["id"]
-    # The create response returns the internal id; the send-id is prefixed.
-    ids = {"send_id": f"group.{internal_id}", "internal_id": internal_id}
-    # Re-list to pick up the canonical send-id if the API provides one.
+    created_id = created.get("id", "")
+    # The create response's id is the prefixed send-id ("group.<b64>"), not the
+    # internal id — resolve both canonically from the group list instead of
+    # deriving one from the other.
     for g in await client.list_groups():
-        if g.get("internal_id") == internal_id:
-            ids["send_id"] = g["id"]
-    store.set_setting(_SETTING_KEY, ids)
-    return ids
+        if created_id in (g["id"], g.get("internal_id")) or g.get("name") == FINDER_GROUP_NAME:
+            ids = {"send_id": g["id"], "internal_id": g["internal_id"]}
+            store.set_setting(_SETTING_KEY, ids)
+            return ids
+    raise RuntimeError(f"created group {created_id!r} not found in group list")
