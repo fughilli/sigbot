@@ -10,6 +10,7 @@ import os
 from finder import config as config_mod
 from finder import pipeline
 from finder.bot.agent import Agent
+from finder.events import EventBus
 from finder.bot.listener import run_listener
 from finder.bot.tools import Tools
 from finder.notify.groups import ensure_finder_group
@@ -41,7 +42,8 @@ async def run() -> None:
     group = await ensure_finder_group(client, store, config.signal.user_id)
     log.info("finder group ready: %s", group["send_id"])
 
-    pass_fn = functools.partial(pipeline.run_pass, config, store, client, group)
+    bus = EventBus()
+    pass_fn = functools.partial(pipeline.run_pass, config, store, client, group, bus)
     scheduler = ScrapeScheduler(store, pass_fn)
     tools = Tools(
         store,

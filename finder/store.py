@@ -46,7 +46,9 @@ CREATE TABLE IF NOT EXISTS listings (
     judge_verdict TEXT,              -- 'match' | 'no_match' | NULL (not judged)
     judge_reason TEXT,
     notified_at  TEXT,
-    feedback     TEXT                -- 'up' | 'down' | NULL
+    feedback     TEXT,               -- 'up' | 'down' | NULL
+    outcome      TEXT,               -- pending|rejected_filter|rejected_clip|rejected_judge|surfaced
+    judgement    TEXT                -- JSON list: one entry per pipeline stage
 );
 CREATE INDEX IF NOT EXISTS listings_repost ON listings(repost_hash);
 CREATE INDEX IF NOT EXISTS listings_seen   ON listings(first_seen_at);
@@ -72,6 +74,14 @@ class Store:
         with self._db:
             self._db.execute("PRAGMA journal_mode=WAL")
             self._db.executescript(_SCHEMA)
+            self._migrate()
+
+    def _migrate(self) -> None:
+        """Additive column migrations for DBs created before the column existed."""
+        have = {r["name"] for r in self._db.execute("PRAGMA table_info(listings)")}
+        for col, decl in (("outcome", "TEXT"), ("judgement", "TEXT")):
+            if col not in have:
+                self._db.execute(f"ALTER TABLE listings ADD COLUMN {col} {decl}")
 
     def close(self) -> None:
         self._db.close()
@@ -170,14 +180,47 @@ class Store:
     def mark_notified(self, listing_id: str) -> None:
         self.update_listing(listing_id, notified_at=_now())
 
+    def record_judgement(self, listing_id: str, stage: str, outcome: str,
+                         **detail: Any) -> None:
+        """Append a stage entry to the listing's judgement trail and set its
+        current outcome. Stage-specific convenience columns (clip_score,
+        judge_verdict, judge_reason) are mirrored when present in detail."""
+        row = self._db.execute(
+            "SELECT judgement FROM listings WHERE id=?", (listing_id,)
+        ).fetchone()
+        trail = json.loads(row["judgement"]) if row and row["judgement"] else []
+        trail.append({"stage": stage, "outcome": outcome, "at": _now(), **detail})
+        fields: dict[str, Any] = {"judgement": json.dumps(trail), "outcome": outcome}
+        for col in ("clip_score", "judge_verdict", "judge_reason"):
+            if col in detail:
+                fields[col] = detail[col]
+        self.update_listing(listing_id, **fields)
+
+    def outcome_counts(self) -> dict:
+        rows = self._db.execute(
+            "SELECT COALESCE(outcome,'unknown') o, COUNT(*) n FROM listings GROUP BY o"
+        ).fetchall()
+        return {r["o"]: r["n"] for r in rows}
+
     def get_listing_by_ref(self, short_ref: int) -> dict | None:
         row = self._db.execute("SELECT * FROM listings WHERE short_ref=?", (short_ref,)).fetchone()
         return self._listing_dict(row) if row else None
 
-    def recent_listings(self, limit: int = 20, matched_only: bool = False) -> list[dict]:
-        where = "WHERE judge_verdict='match'" if matched_only else ""
+    def recent_listings(self, limit: int = 20, matched_only: bool = False,
+                        outcome: str | None = None, query_name: str | None = None) -> list[dict]:
+        clauses, params = [], []
+        if matched_only:
+            clauses.append("judge_verdict='match'")
+        if outcome:
+            clauses.append("outcome=?")
+            params.append(outcome)
+        if query_name:
+            clauses.append("query_name=?")
+            params.append(query_name)
+        where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
         rows = self._db.execute(
-            f"SELECT * FROM listings {where} ORDER BY first_seen_at DESC LIMIT ?", (limit,)
+            f"SELECT * FROM listings {where} ORDER BY first_seen_at DESC LIMIT ?",
+            (*params, limit),
         ).fetchall()
         return [self._listing_dict(r) for r in rows]
 
@@ -185,6 +228,7 @@ class Store:
     def _listing_dict(row: sqlite3.Row) -> dict:
         d = dict(row)
         d["image_urls"] = json.loads(d["image_urls"] or "[]")
+        d["judgement"] = json.loads(d["judgement"] or "[]")
         return d
 
     # -- chat history ----------------------------------------------------------

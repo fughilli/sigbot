@@ -6,10 +6,12 @@ py_library(
     name = "finder_lib",
     srcs = glob(["**/*.py"], exclude = ["main.py"]),
     deps = [
+        "@pypi//aiohttp",
         "@pypi//anthropic",
         "@pypi//apscheduler",
         "@pypi//httpx",
         "@pypi//pyyaml",
+        "@pypi//selectolax",
         "@pypi//websockets",
     ],
 )
