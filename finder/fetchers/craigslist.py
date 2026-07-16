@@ -23,11 +23,33 @@ _CATEGORY = "fua"  # furniture - all
 _MAX_DETAIL_FETCHES = 25
 _IMG_RE = re.compile(r"https://images\.craigslist\.org/[^\"\s]+_600x450\.jpg")
 
+# Craigslist 404s on a `query` param longer than 180 chars (verified 2026-07;
+# 180 ok, 181 -> 404). The limit is on the decoded string, so we cap the
+# joined keyword list at whole-term boundaries.
+_MAX_QUERY_LEN = 180
+
+
+def build_query(keywords: list[str]) -> tuple[str, list[str]]:
+    """Join keywords with '|' (Craigslist OR), keeping whole terms within the
+    180-char limit. Returns (query, dropped_keywords)."""
+    query, used = "", []
+    for kw in keywords:
+        candidate = f"{query}|{kw}" if query else kw
+        if len(candidate) > _MAX_QUERY_LEN:
+            continue  # try the next (shorter) term rather than stopping outright
+        query, _ = candidate, used.append(kw)
+    dropped = [kw for kw in keywords if kw not in used]
+    return query, dropped
+
 
 def search_url(location: dict, query_spec: dict) -> str:
     site = location.get("craigslist_site", "sfbay")
+    query, dropped = build_query(query_spec.get("keywords", []))
+    if dropped:
+        log.warning("craigslist query capped at %d chars; dropped keywords: %s",
+                    _MAX_QUERY_LEN, dropped)
     params = [
-        ("query", "|".join(query_spec.get("keywords", []))),
+        ("query", query),
         ("postal", location.get("postal", "")),
         ("search_distance", str(int(location.get("radius_miles", 15)))),
     ]
