@@ -45,6 +45,7 @@
   .b-surfaced { background:#12351f; color:var(--ok); }
   .b-rejected_filter, .b-rejected_clip, .b-rejected_judge { background:#3a1717; color:var(--bad); }
   .b-pending { background:#3a2f12; color:var(--warn); }
+  .b-deferred { background:#2a313b; color:var(--dim); }
   details { margin-top:8px; }
   summary { cursor:pointer; color:var(--dim); font-size:12.5px; user-select:none; }
   .stage { margin:6px 0 0 12px; padding:8px 10px; border-left:2px solid var(--line);
@@ -157,8 +158,9 @@ const FEED_VERBS = {
   "listing.judged": (e) => `#${e.short_ref} ${e.stage}: <b>${e.outcome}</b>`,
   "listing.surfaced": (e) => `📣 surfaced <b>#${e.short_ref} ${esc(e.title)}</b>`,
   "listing.repost": (e) => `repost skipped: ${esc(e.title)}`,
+  "query.reevaluating": (e) => `re-evaluating ${e.count} cached listings for ${esc(e.query)} (criteria changed)`,
   "source.error": (e) => `⚠️ ${e.source} error: ${esc(e.error)}`,
-  "pass.end": (e) => `pass done — ${e.fetched} fetched, ${e.new} new, ${e.surfaced} surfaced, ${e.rejected} rejected`,
+  "pass.end": (e) => `pass done — ${e.fetched} fetched, ${e.new} new, ${e.reevaluated || 0} re-evaluated, ${e.surfaced} surfaced, ${e.rejected} rejected`,
 };
 
 function connectFeed() {

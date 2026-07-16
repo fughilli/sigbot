@@ -145,19 +145,26 @@ def listing(n, price=300.0):
             "image_urls": [f"http://img/{n}.jpg"]}
 
 
-def run_aesthetic_pass(tmp_path, rows, scorer, judge, top_k=8, threshold=0.24):
-    store = Store(tmp_path / "t.db")
-    store.set_setting("location", {"postal": "94103", "radius_miles": 15})
-    store.upsert_query("mcm", {"keywords": ["couch"], "max_price": 500,
-                               "aesthetic_description": "mid-century modern",
-                               "clip_threshold": threshold, "judge_top_k": top_k})
+def run_aesthetic_pass(tmp_path, rows, scorer, judge, top_k=8, threshold=0.24,
+                       store=None, upsert=True, spec_overrides=None):
+    import unittest.mock as mock
+
+    if store is None:
+        store = Store(tmp_path / "t.db")
+        store.set_setting("location", {"postal": "94103", "radius_miles": 15})
+    if upsert:
+        spec = {"keywords": ["couch"], "max_price": 500,
+                "aesthetic_description": "mid-century modern",
+                "clip_threshold": threshold, "judge_top_k": top_k}
+        spec.update(spec_overrides or {})
+        store.upsert_query("mcm", spec)
     config = Config(signal=SignalConfig(api_url="x", bot_number="+1", user_id="u"),
                     db_path=str(tmp_path / "t.db"),
                     sources={"craigslist": {"enabled": True}})
     fetcher = FakeFetcher(rows)
-    import unittest.mock as mock
     signal = FakeSignal()
-    with mock.patch.object(pipeline, "CraigslistFetcher", lambda: fetcher):
+    with mock.patch.object(pipeline, "CraigslistFetcher", lambda: fetcher), \
+         mock.patch.object(pipeline, "IMAGE_CACHE_DIR", tmp_path / "imgcache"):
         summary = asyncio.run(pipeline.run_pass(
             config, store, signal, {"send_id": "g"}, scorer=scorer, judge=judge))
     return store, signal, summary
@@ -173,17 +180,85 @@ def test_clip_threshold_gates_and_judge_reason_in_ping(tmp_path):
                                         "reason": "tapered walnut legs"}})
     store, signal, summary = run_aesthetic_pass(tmp_path, rows, scorer, judge)
 
-    assert summary == {"fetched": 2, "new": 2, "rejected": 1, "surfaced": 1, "errors": 0}
+    assert summary == {"fetched": 2, "new": 2, "reevaluated": 0, "rejected": 1,
+                       "surfaced": 1, "errors": 0}
     assert judge.calls == ["craigslist:1"]  # low scorer never judged
     assert "tapered walnut legs" in signal.sent[0]
 
     good = store.get_listing_by_ref(1)
     assert [j["stage"] for j in good["judgement"]] == ["hard_filter", "clip", "judge", "notify"]
     assert good["clip_score"] == 0.31 and good["judge_verdict"] == "match"
+    assert good["criteria_hash"]  # finalized
 
     low = store.get_listing_by_ref(2)
     assert low["outcome"] == "rejected_clip"
     assert low["judgement"][-1]["threshold"] == 0.24
+    assert low["criteria_hash"]  # finalized
+
+
+def test_criteria_change_reevaluates_without_refetch(tmp_path):
+    rows = [listing(1)]
+    # first pass: threshold too high, listing rejected at clip
+    scorer = FakeScorer({"http://img/1.jpg": {"score": 0.30, "visual": 0.3,
+                                              "text": 0.3, "refs": 2}})
+    judge = FakeJudge({"craigslist:1": {"match": True, "confidence": 0.9,
+                                        "reason": "walnut, great"}})
+    store, signal, s1 = run_aesthetic_pass(tmp_path, rows, scorer, judge,
+                                           spec_overrides={"clip_threshold": 0.5})
+    assert s1["surfaced"] == 0
+    assert store.get_listing_by_ref(1)["outcome"] == "rejected_clip"
+
+    # lower the threshold -> criteria hash changes -> re-evaluated, no re-fetch,
+    # and now it clips-through and gets judged + surfaced
+    fetcher_calls_before = None  # FakeFetcher.detail not called for cached listing
+    store, signal2, s2 = run_aesthetic_pass(
+        tmp_path, rows=[], scorer=scorer, judge=judge, store=store,
+        spec_overrides={"clip_threshold": 0.2})
+    assert s2["new"] == 0 and s2["reevaluated"] == 1
+    assert s2["surfaced"] == 1
+    good = store.get_listing_by_ref(1)
+    assert good["outcome"] == "surfaced" and good["judge_verdict"] == "match"
+    assert "walnut, great" in signal2.sent[0]
+
+
+def test_unchanged_criteria_second_pass_is_noop(tmp_path):
+    rows = [listing(1)]
+    scorer = FakeScorer({"http://img/1.jpg": {"score": 0.3, "visual": 0.3,
+                                             "text": 0.3, "refs": 2}})
+    judge = FakeJudge({"craigslist:1": {"match": True, "confidence": 0.9, "reason": "yep"}})
+    store, signal, s1 = run_aesthetic_pass(tmp_path, rows, scorer, judge)
+    assert s1["surfaced"] == 1
+
+    # same criteria, no new rows: nothing re-evaluated, no duplicate ping
+    store, signal2, s2 = run_aesthetic_pass(
+        tmp_path, rows=[], scorer=scorer, judge=judge, store=store, upsert=False)
+    assert s2 == {"fetched": 0, "new": 0, "reevaluated": 0, "rejected": 0,
+                  "surfaced": 0, "errors": 0}
+    assert signal2.sent == []
+
+
+def test_progressive_judge_coverage_over_passes(tmp_path):
+    # 3 clip-passers, judge budget 1 -> one judged per pass, rest deferred and
+    # carried forward (criteria_hash stays unset until judged)
+    rows = [listing(1), listing(2), listing(3)]
+    scorer = FakeScorer({
+        "http://img/1.jpg": {"score": 0.30, "visual": 0.3, "text": None, "refs": 1},
+        "http://img/2.jpg": {"score": 0.40, "visual": 0.4, "text": None, "refs": 1},
+        "http://img/3.jpg": {"score": 0.35, "visual": 0.35, "text": None, "refs": 1},
+    })
+    judge = FakeJudge({f"craigslist:{n}": {"match": True, "confidence": 0.8,
+                                           "reason": f"m{n}"} for n in (1, 2, 3)})
+    store, signal, s1 = run_aesthetic_pass(tmp_path, rows, scorer, judge,
+                                           spec_overrides={"judge_top_k": 1})
+    assert judge.calls == ["craigslist:2"]  # highest clip score judged first
+    assert s1["surfaced"] == 1
+
+    # pass 2: no new rows; the two deferred ones are still stale -> re-clipped,
+    # next highest judged
+    store, signal2, s2 = run_aesthetic_pass(
+        tmp_path, rows=[], scorer=scorer, judge=judge, store=store, upsert=False)
+    assert s2["reevaluated"] == 2 and s2["surfaced"] == 1
+    assert judge.calls == ["craigslist:2", "craigslist:3"]  # cumulative
 
 
 def test_judge_top_k_budget_by_clip_rank(tmp_path):
@@ -199,16 +274,17 @@ def test_judge_top_k_budget_by_clip_rank(tmp_path):
     })
     store, signal, summary = run_aesthetic_pass(tmp_path, rows, scorer, judge, top_k=2)
 
-    # judged best-first, lowest scorer dropped by budget
+    # judged best-first, lowest scorer deferred (not rejected) by budget
     assert judge.calls == ["craigslist:2", "craigslist:3"]
     assert summary["surfaced"] == 1
-    dropped = [l for l in store.recent_listings(limit=10)
-               if l["id"] == "craigslist:1"][0]
-    assert dropped["outcome"] == "rejected_judge"
-    assert "top-2" in dropped["judgement"][-1]["reason"]
+    deferred = [l for l in store.recent_listings(limit=10)
+                if l["id"] == "craigslist:1"][0]
+    assert deferred["outcome"] == "deferred"
+    assert deferred["criteria_hash"] is None  # carried forward, not finalized
+    assert "top-2" in deferred["judgement"][-1]["reason"]
     no_match = [l for l in store.recent_listings(limit=10)
                 if l["id"] == "craigslist:3"][0]
-    assert no_match["judge_reason"] == "too plain"
+    assert no_match["judge_reason"] == "too plain" and no_match["criteria_hash"]
 
 
 if __name__ == "__main__":

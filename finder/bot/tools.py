@@ -98,6 +98,18 @@ TOOL_DEFS: list[dict] = [
         "input_schema": {"type": "object", "properties": {}},
     },
     {
+        "name": "reevaluate_query",
+        "description": "Force every already-seen listing for a query to be "
+                       "re-judged on the next pass. Editing a query's criteria "
+                       "already does this automatically; use this only after a "
+                       "code/heuristic change the criteria can't see.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"name": {"type": "string"}},
+            "required": ["name"],
+        },
+    },
+    {
         "name": "status",
         "description": "Bot health: last/next run, listing counts, source state.",
         "input_schema": {"type": "object", "properties": {}},
@@ -261,6 +273,14 @@ class Tools:
         if self._trigger_run is None:
             raise ValueError("scrape runner not wired up yet")
         return {"ok": True, "result": self._trigger_run()}
+
+    def _t_reevaluate_query(self, name: str) -> dict:
+        if not self.store.get_query(name):
+            raise ValueError(f"no query named {name!r}")
+        cleared = self.store.clear_criteria_hashes(name)
+        result = self._trigger_run() if self._trigger_run else "run not wired up"
+        return {"ok": True, "name": name, "listings_to_reevaluate": cleared,
+                "result": result}
 
     def _t_status(self) -> dict:
         base = {

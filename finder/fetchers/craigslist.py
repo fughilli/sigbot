@@ -20,7 +20,7 @@ log = logging.getLogger(__name__)
 
 SOURCE = "craigslist"
 _CATEGORY = "fua"  # furniture - all
-_MAX_DETAIL_FETCHES = 25
+_MAX_DETAIL_FETCHES = 60  # per-source politeness ceiling; pipeline budget caps lower
 _IMG_RE = re.compile(r"https://images\.craigslist\.org/[^\"\s]+_600x450\.jpg")
 
 # Craigslist 404s on a `query` param longer than 180 chars (verified 2026-07;

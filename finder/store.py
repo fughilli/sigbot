@@ -79,7 +79,8 @@ class Store:
     def _migrate(self) -> None:
         """Additive column migrations for DBs created before the column existed."""
         have = {r["name"] for r in self._db.execute("PRAGMA table_info(listings)")}
-        for col, decl in (("outcome", "TEXT"), ("judgement", "TEXT")):
+        for col, decl in (("outcome", "TEXT"), ("judgement", "TEXT"),
+                          ("criteria_hash", "TEXT")):
             if col not in have:
                 self._db.execute(f"ALTER TABLE listings ADD COLUMN {col} {decl}")
 
@@ -205,6 +206,31 @@ class Store:
     def get_listing_by_ref(self, short_ref: int) -> dict | None:
         row = self._db.execute("SELECT * FROM listings WHERE short_ref=?", (short_ref,)).fetchone()
         return self._listing_dict(row) if row else None
+
+    def listings_for_query(self, query_name: str, stale_criteria: str | None = None,
+                           limit: int = 1000) -> list[dict]:
+        """Cached listings for a query. If stale_criteria is given, only those
+        whose criteria_hash differs from it (i.e. need re-evaluation under the
+        current criteria) — newest first."""
+        if stale_criteria is None:
+            rows = self._db.execute(
+                "SELECT * FROM listings WHERE query_name=? ORDER BY first_seen_at DESC LIMIT ?",
+                (query_name, limit)).fetchall()
+        else:
+            rows = self._db.execute(
+                "SELECT * FROM listings WHERE query_name=? "
+                "AND (criteria_hash IS NULL OR criteria_hash != ?) "
+                "ORDER BY first_seen_at DESC LIMIT ?",
+                (query_name, stale_criteria, limit)).fetchall()
+        return [self._listing_dict(r) for r in rows]
+
+    def clear_criteria_hashes(self, query_name: str) -> int:
+        """Force full re-evaluation of a query's listings on the next pass
+        (e.g. after a code/heuristic change the criteria hash can't see)."""
+        with self._lock, self._db:
+            cur = self._db.execute(
+                "UPDATE listings SET criteria_hash=NULL WHERE query_name=?", (query_name,))
+        return cur.rowcount
 
     def recent_listings(self, limit: int = 20, matched_only: bool = False,
                         outcome: str | None = None, query_name: str | None = None) -> list[dict]:

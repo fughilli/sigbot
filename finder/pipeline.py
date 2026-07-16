@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
 import pathlib
 import re
@@ -31,6 +32,11 @@ from finder.store import Store
 log = logging.getLogger(__name__)
 
 REFERENCES_DIR = pathlib.Path("references")
+IMAGE_CACHE_DIR = pathlib.Path("cache/images")
+# Per-pass ceiling on NEW detail-page fetches per source (politeness bound —
+# each is a throttled HTTP request). Re-evaluating already-cached listings is
+# free of this budget, so criteria changes reconsider the whole backlog.
+DEFAULT_MAX_NEW_PER_PASS = 40
 _scorer_singleton = None
 
 
@@ -46,6 +52,43 @@ def repost_hash(listing: dict) -> str:
     first_img = (listing.get("image_urls") or [""])[0]
     key = f"{listing.get('title', '')}|{listing.get('price')}|{first_img}"
     return hashlib.sha1(key.encode()).hexdigest()
+
+
+def criteria_fingerprint(spec: dict, ref_dir: pathlib.Path) -> str:
+    """A stable hash of everything that affects a listing's verdict: the
+    matching-relevant spec fields plus the reference-image set. When any of
+    these change, a listing's stored hash no longer matches and it gets
+    re-evaluated on the next pass."""
+    parts = {k: spec.get(k) for k in
+             ("keywords", "max_price", "aesthetic_description",
+              "clip_threshold", "judge_top_k")}
+    refs = []
+    if ref_dir.is_dir():
+        for p in sorted(ref_dir.iterdir()):
+            if p.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}:
+                refs.append(f"{p.name}:{p.stat().st_mtime_ns}")
+    blob = json.dumps({"spec": parts, "refs": refs}, sort_keys=True)
+    return hashlib.sha1(blob.encode()).hexdigest()
+
+
+async def cached_image(fetcher, url: str) -> bytes | None:
+    """Fetch an image, memoizing bytes to disk so re-evaluation under changed
+    criteria doesn't re-download. fetcher may be None (re-eval with the source
+    disabled) — then only the cache is consulted."""
+    key = hashlib.sha1(url.encode()).hexdigest()
+    path = IMAGE_CACHE_DIR / f"{key}.img"
+    if path.exists():
+        return path.read_bytes()
+    if fetcher is None:
+        return None
+    data = await fetcher.fetch_image(url)
+    if data:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+        except OSError as e:
+            log.warning("image cache write failed (%s); continuing", e)
+    return data
 
 
 def hard_filter(listing: dict, spec: dict) -> tuple[bool, dict]:
@@ -128,25 +171,35 @@ async def run_pass(config: Config, store: Store, client: SignalClient,
             fb = FacebookFetcher(store, profile_dir=fb_cfg.get("profile_dir", ".fb-profile"))
             fetchers.append(fb)
 
-    summary = {"fetched": 0, "new": 0, "rejected": 0, "surfaced": 0, "errors": 0}
+    summary = {"fetched": 0, "new": 0, "reevaluated": 0, "rejected": 0,
+               "surfaced": 0, "errors": 0}
     emit("pass.start", queries=[q["name"] for q in queries],
          sources=[f.name for f in fetchers])
+    fetchers_by_source = {f.name: f for f in fetchers}
 
-    async def notify(listing: dict, ref: int, fetcher, image: bytes | None,
+    def finalize(listing_id: str, chash: str) -> None:
+        # Mark this listing as fully evaluated under the current criteria, so
+        # the next pass skips it — UNLESS the criteria change again.
+        store.update_listing(listing_id, criteria_hash=chash)
+
+    async def notify(listing: dict, ref: int, source_fetcher, image: bytes | None,
                      reason: str | None = None) -> None:
         try:
-            message = format_notification(listing, ref, reason)
-            if image is None and listing.get("image_urls"):
-                image = await fetcher.fetch_image(listing["image_urls"][0])
-            if image:
-                await client.send_image(group["send_id"], message, image)
-            else:
-                await client.send(group["send_id"], message)
-            store.mark_notified(listing["id"])
+            # Only ping once per listing. A re-evaluated listing that already
+            # matched keeps its 'surfaced' outcome without a duplicate message.
+            if not listing.get("notified_at"):
+                message = format_notification(listing, ref, reason)
+                if image is None and listing.get("image_urls"):
+                    image = await cached_image(source_fetcher, listing["image_urls"][0])
+                if image:
+                    await client.send_image(group["send_id"], message, image)
+                else:
+                    await client.send(group["send_id"], message)
+                store.mark_notified(listing["id"])
+                summary["surfaced"] += 1
+                emit("listing.surfaced", short_ref=ref, title=listing.get("title"))
             store.record_judgement(listing["id"], "notify", "surfaced",
                                    reason=reason or "passed all active stages")
-            summary["surfaced"] += 1
-            emit("listing.surfaced", short_ref=ref, title=listing.get("title"))
         except Exception as e:
             log.exception("notify failed for %s", listing["id"])
             store.record_judgement(listing["id"], "notify", "pending",
@@ -156,12 +209,74 @@ async def run_pass(config: Config, store: Store, client: SignalClient,
     for query in queries:
         spec = query["spec"]
         ref_dir = REFERENCES_DIR / query["name"]
+        chash = criteria_fingerprint(spec, ref_dir)
         has_aesthetic = bool((spec.get("aesthetic_description") or "").strip()) or (
             ref_dir.is_dir() and any(ref_dir.iterdir())
         )
-        # (listing, ref, fetcher, images, clip_score) awaiting the judge, per query
-        judge_pool: list[tuple[dict, int, object, list[bytes], float]] = []
+        budget = spec.get("max_new_per_pass", DEFAULT_MAX_NEW_PER_PASS)
+        # (listing, ref, source_name, images, clip_score) awaiting the judge.
+        judge_pool: list[tuple[dict, int, str, list[bytes], float]] = []
 
+        async def evaluate(listing: dict, ref: int, source_fetcher) -> None:
+            """Run hard_filter + clip for one listing; queue survivors for the
+            batched judge. Finalizes the criteria hash at every terminal
+            outcome (but NOT for clip-passers, which the judge finalizes)."""
+            passed, checks = hard_filter(listing, spec)
+            store.record_judgement(
+                listing["id"], "hard_filter",
+                "pass" if passed else "rejected_filter", checks=checks)
+            emit("listing.judged", short_ref=ref, stage="hard_filter",
+                 outcome="pass" if passed else "rejected_filter", checks=checks)
+            if not passed:
+                summary["rejected"] += 1
+                finalize(listing["id"], chash)
+                return
+
+            if not has_aesthetic:
+                store.record_judgement(listing["id"], "clip", "pass",
+                                       reason="skipped: no aesthetic target configured")
+                await notify(listing, ref, source_fetcher, None)
+                finalize(listing["id"], chash)
+                return
+
+            images = []
+            for url in (listing.get("image_urls") or [])[:4]:
+                data = await cached_image(source_fetcher, url)
+                if data:
+                    images.append(data)
+            active_scorer = scorer or _default_scorer()
+            try:
+                result = await asyncio.to_thread(active_scorer.score, images, spec, ref_dir)
+            except Exception as e:
+                log.exception("clip scoring failed for %s", listing["id"])
+                store.record_judgement(listing["id"], "clip", "pending",
+                                       reason=f"scorer error: {e}")
+                summary["errors"] += 1
+                return  # not finalized -> retried next pass
+
+            if "skipped" in result:
+                store.record_judgement(listing["id"], "clip", "pass",
+                                       reason=f"skipped: {result['skipped']}")
+                await notify(listing, ref, source_fetcher, images[0] if images else None)
+                finalize(listing["id"], chash)
+                return
+
+            threshold = spec.get("clip_threshold", 0.24)
+            clip_pass = result["score"] >= threshold
+            store.record_judgement(
+                listing["id"], "clip", "pass" if clip_pass else "rejected_clip",
+                score=result["score"], threshold=threshold, clip_score=result["score"],
+                reason=f"visual={result['visual']} text={result['text']} refs={result['refs']}")
+            emit("listing.judged", short_ref=ref, stage="clip",
+                 outcome="pass" if clip_pass else "rejected_clip",
+                 score=result["score"], threshold=threshold)
+            if not clip_pass:
+                summary["rejected"] += 1
+                finalize(listing["id"], chash)
+                return
+            judge_pool.append((listing, ref, source_fetcher, images, result["score"]))
+
+        # -- 1. new listings from each source (fetch-budget limited) -----------
         for fetcher in fetchers:
             try:
                 rows = await fetcher.search(location, spec)
@@ -184,15 +299,14 @@ async def run_pass(config: Config, store: Store, client: SignalClient,
                 summary["errors"] += 1
                 continue
             summary["fetched"] += len(rows)
-            emit("search.done", source=fetcher.name, query=query["name"],
-                 results=len(rows))
+            emit("search.done", source=fetcher.name, query=query["name"], results=len(rows))
 
-            detail_budget = fetcher.max_detail_fetches
+            detail_budget = min(budget, fetcher.max_detail_fetches)
             for row in rows:
                 if store.seen(row["id"]):
                     continue
                 if detail_budget <= 0:
-                    log.info("detail budget exhausted for %s", fetcher.name)
+                    log.info("new-fetch budget exhausted for %s", fetcher.name)
                     emit("source.budget_exhausted", source=fetcher.name)
                     break
                 detail_budget -= 1
@@ -215,69 +329,25 @@ async def run_pass(config: Config, store: Store, client: SignalClient,
                 emit("listing.new", short_ref=ref, id=listing["id"],
                      title=listing.get("title"), price=listing.get("price"),
                      url=listing.get("url"),
-                     image=(listing.get("image_urls") or [None])[0],
-                     query=query["name"])
+                     image=(listing.get("image_urls") or [None])[0], query=query["name"])
+                await evaluate(listing, ref, fetcher)
 
-                passed, checks = hard_filter(listing, spec)
-                store.record_judgement(
-                    listing["id"], "hard_filter",
-                    "pass" if passed else "rejected_filter", checks=checks,
-                )
-                emit("listing.judged", short_ref=ref, stage="hard_filter",
-                     outcome="pass" if passed else "rejected_filter", checks=checks)
-                if not passed:
-                    summary["rejected"] += 1
-                    continue
+        # -- 2. cached listings whose criteria changed (re-eval, no fetch) -----
+        # New clip-passers from step 1 are queued but not yet finalized, so they
+        # match the stale query too — exclude them to avoid double-processing.
+        pool_ids = {item[0]["id"] for item in judge_pool}
+        stale = [l for l in store.listings_for_query(query["name"], stale_criteria=chash)
+                 if l["id"] not in pool_ids]
+        if stale:
+            log.info("re-evaluating %d cached listings for %s under new criteria",
+                     len(stale), query["name"])
+            emit("query.reevaluating", query=query["name"], count=len(stale))
+        for listing in stale:
+            summary["reevaluated"] += 1
+            await evaluate(listing, listing["short_ref"],
+                           fetchers_by_source.get(listing["source"]))
 
-                if not has_aesthetic:
-                    store.record_judgement(
-                        listing["id"], "clip", "pass",
-                        reason="skipped: no aesthetic target configured")
-                    await notify(listing, ref, fetcher, None)
-                    continue
-
-                # -- clip stage --------------------------------------------------
-                images = []
-                for url in (listing.get("image_urls") or [])[:4]:
-                    data = await fetcher.fetch_image(url)
-                    if data:
-                        images.append(data)
-                active_scorer = scorer or _default_scorer()
-                try:
-                    result = await asyncio.to_thread(
-                        active_scorer.score, images, spec, ref_dir)
-                except Exception as e:
-                    log.exception("clip scoring failed for %s", listing["id"])
-                    store.record_judgement(listing["id"], "clip", "pending",
-                                           reason=f"scorer error: {e}")
-                    summary["errors"] += 1
-                    continue
-
-                if "skipped" in result:
-                    store.record_judgement(listing["id"], "clip", "pass",
-                                           reason=f"skipped: {result['skipped']}")
-                    await notify(listing, ref, fetcher, images[0] if images else None)
-                    continue
-
-                threshold = spec.get("clip_threshold", 0.24)
-                clip_pass = result["score"] >= threshold
-                store.record_judgement(
-                    listing["id"], "clip",
-                    "pass" if clip_pass else "rejected_clip",
-                    score=result["score"], threshold=threshold,
-                    clip_score=result["score"],
-                    reason=f"visual={result['visual']} text={result['text']} "
-                           f"refs={result['refs']}",
-                )
-                emit("listing.judged", short_ref=ref, stage="clip",
-                     outcome="pass" if clip_pass else "rejected_clip",
-                     score=result["score"], threshold=threshold)
-                if not clip_pass:
-                    summary["rejected"] += 1
-                    continue
-                judge_pool.append((listing, ref, fetcher, images, result["score"]))
-
-        # -- judge stage: top-K by clip score, per query -------------------------
+        # -- 3. judge stage: top-K by clip score, per query --------------------
         if judge_pool:
             top_k = int(spec.get("judge_top_k", 8))
             judge_pool.sort(key=lambda item: item[4], reverse=True)
@@ -285,15 +355,17 @@ async def run_pass(config: Config, store: Store, client: SignalClient,
                 config.anthropic_api_key, config.agent_model)
             ref_images = judge_mod.load_reference_images(ref_dir)
 
-            for i, (listing, ref, fetcher, images, clip_score) in enumerate(judge_pool):
+            for i, (listing, ref, source_fetcher, images, clip_score) in enumerate(judge_pool):
                 if i >= top_k:
+                    # Not judged this pass — leave the criteria hash unset so the
+                    # next pass reconsiders it (progressive coverage: K judged
+                    # per pass until the clip-passing backlog drains).
                     store.record_judgement(
-                        listing["id"], "judge", "rejected_judge",
-                        reason=f"below top-{top_k} CLIP rank this pass "
-                               f"(score {clip_score})")
+                        listing["id"], "judge", "deferred",
+                        reason=f"clip-passed (score {clip_score}); below "
+                               f"top-{top_k} judge budget this pass")
                     emit("listing.judged", short_ref=ref, stage="judge",
-                         outcome="rejected_judge", reason="below top-K budget")
-                    summary["rejected"] += 1
+                         outcome="deferred", reason="below top-K budget")
                     continue
                 try:
                     verdict = await active_judge.judge(listing, images, spec, ref_images)
@@ -302,24 +374,21 @@ async def run_pass(config: Config, store: Store, client: SignalClient,
                     store.record_judgement(listing["id"], "judge", "pending",
                                            reason=f"judge error: {e}")
                     summary["errors"] += 1
-                    continue
+                    continue  # not finalized -> retried next pass
                 outcome = "pass" if verdict["match"] else "rejected_judge"
                 store.record_judgement(
                     listing["id"], "judge", outcome,
                     judge_verdict="match" if verdict["match"] else "no_match",
-                    judge_reason=verdict["reason"],
-                    reason=verdict["reason"],
-                    confidence=verdict["confidence"],
-                )
-                emit("listing.judged", short_ref=ref, stage="judge",
-                     outcome=outcome, reason=verdict["reason"],
-                     confidence=verdict["confidence"])
+                    judge_reason=verdict["reason"], reason=verdict["reason"],
+                    confidence=verdict["confidence"])
+                emit("listing.judged", short_ref=ref, stage="judge", outcome=outcome,
+                     reason=verdict["reason"], confidence=verdict["confidence"])
                 if verdict["match"]:
-                    await notify(listing, ref, fetcher,
-                                 images[0] if images else None,
-                                 reason=verdict["reason"])
+                    await notify(listing, ref, source_fetcher,
+                                 images[0] if images else None, reason=verdict["reason"])
                 else:
                     summary["rejected"] += 1
+                finalize(listing["id"], chash)
 
     if fb is not None:
         await fb.close()

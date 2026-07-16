@@ -91,6 +91,24 @@ def test_run_now_and_status(tools):
     assert s["next_run"] == "soon" and "queries" in s
 
 
+def test_reevaluate_query(tools):
+    assert "error" in call(tools, "reevaluate_query", name="nope")
+    call(tools, "upsert_query", name="mcm-couch", keywords=["couch"])
+    tools.store.add_listing({"id": "cl:1", "source": "craigslist", "title": "C",
+                             "query_name": "mcm-couch", "criteria_hash": "abc"})
+    out = call(tools, "reevaluate_query", name="mcm-couch")
+    assert out["ok"] and out["listings_to_reevaluate"] == 1 and out["result"] == "started"
+    assert tools.store.get_listing_by_ref(1)["criteria_hash"] is None
+
+
+def test_set_location_lat_lon(tools):
+    assert "error" in call(tools, "set_location", postal="94103", radius_miles=10,
+                           latitude=37.7)  # lon missing
+    ok = call(tools, "set_location", postal="94103", radius_miles=10,
+              latitude=37.7573, longitude=-122.4906)
+    assert ok["location"]["lat"] == 37.7573 and ok["location"]["lon"] == -122.4906
+
+
 def test_unknown_tool_and_bad_args(tools):
     assert "error" in call(tools, "frobnicate")
     assert "error" in call(tools, "set_cadence")  # missing arg

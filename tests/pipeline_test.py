@@ -64,6 +64,7 @@ def env(tmp_path, monkeypatch):
     )
     fetcher = FakeFetcher(LISTINGS)
     monkeypatch.setattr(pipeline, "CraigslistFetcher", lambda: fetcher)
+    monkeypatch.setattr(pipeline, "IMAGE_CACHE_DIR", tmp_path / "imgcache")
     signal = FakeSignal()
     group = {"send_id": "group.abc", "internal_id": "abc"}
     yield store, config, fetcher, signal, group
@@ -77,7 +78,8 @@ def run(config, store, signal, group):
 def test_pass_filters_and_notifies(env):
     store, config, fetcher, signal, group = env
     summary = run(config, store, signal, group)
-    assert summary == {"fetched": 3, "new": 3, "rejected": 2, "surfaced": 1, "errors": 0}
+    assert summary == {"fetched": 3, "new": 3, "reevaluated": 0, "rejected": 2,
+                       "surfaced": 1, "errors": 0}
 
     # the good one was surfaced with its image, message references #ref and price
     assert len(signal.sent) == 1
