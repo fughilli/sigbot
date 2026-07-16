@@ -14,7 +14,7 @@ FINDER_GROUP_NAME = "\U0001f6cb Furniture Finder"
 _SETTING_KEY = "finder_group"
 
 
-async def ensure_finder_group(client: SignalClient, store: Store, user_number: str) -> dict:
+async def ensure_finder_group(client: SignalClient, store: Store, user_id: str) -> dict:
     """Returns {'send_id': 'group.<b64>', 'internal_id': '<b64>'} — creating the
     group on first run, recovering it by name if settings were lost."""
     cached = store.get_setting(_SETTING_KEY)
@@ -30,7 +30,7 @@ async def ensure_finder_group(client: SignalClient, store: Store, user_number: s
             return ids
 
     log.info("creating group %r", FINDER_GROUP_NAME)
-    created = await client.create_group(FINDER_GROUP_NAME, members=[user_number])
+    created = await client.create_group(FINDER_GROUP_NAME, members=[user_id])
     internal_id = created["id"]
     # The create response returns the internal id; the send-id is prefixed.
     ids = {"send_id": f"group.{internal_id}", "internal_id": internal_id}

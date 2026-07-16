@@ -10,6 +10,7 @@ Google Voice.
 from __future__ import annotations
 
 import datetime
+import os
 import pathlib
 import re
 import subprocess
@@ -94,13 +95,17 @@ def normalize_e164(raw: str) -> str:
 def main() -> None:
     # Phase 0 — preflight
     say("phase 0: preflight")
+    # `bazel run` starts us in the runfiles tree; hop back to where the user ran it.
+    if os.environ.get("BUILD_WORKING_DIRECTORY"):
+        os.chdir(os.environ["BUILD_WORKING_DIRECTORY"])
     if not pathlib.Path("docker-compose.yml").exists():
         fail("run from the repo root (docker-compose.yml not found)")
     if not (_docker_available() or _native_available()):
         fail("need docker OR the nix services build (nix build .#signal-services -o .nix-services)")
 
     bot = normalize_e164(ask("Bot number (the Google Voice number):"))
-    user = normalize_e164(ask("Your Signal number (for the hello test):"))
+    user_raw = ask("Your Signal number (+1XXXXXXXXXX; blank if you go by username):")
+    user = normalize_e164(user_raw) if user_raw else None
 
     try:
         httpx.get(f"{API}/v1/about", timeout=2)
@@ -152,13 +157,20 @@ def main() -> None:
 
         # Phase 5 — first contact (the bot creates the group itself on first start)
         say("phase 5: first contact")
-        c.post("/v2/send", json={
-            "number": bot, "recipients": [user],
-            "message": "\U0001f44b Furniture Finder here — accept this message "
-                       "request so I can add you to our group chat.",
-        }).raise_for_status()
-        print(f"    Sent. On YOUR phone: accept the message request from {bot}.")
-        ask("Press enter once accepted…")
+        if user:
+            c.post("/v2/send", json={
+                "number": bot, "recipients": [user],
+                "message": "\U0001f44b Furniture Finder here — accept this message "
+                           "request so I can add you to our group chat.",
+            }).raise_for_status()
+            print(f"    Sent. On YOUR phone: accept the message request from {bot}.")
+            ask("Press enter once accepted…")
+        else:
+            # Username accounts: the bot can't initiate reliably, so contact is
+            # inbound — the first message reveals the account's number/ACI for
+            # the allowlist and group membership.
+            print(f"    From YOUR Signal app: start a chat with {bot} and send 'hi'.")
+            print("    (The bot captures your account id from that message.)")
 
     # Phase 6 — backup
     say("phase 6: backup of signal data volume")

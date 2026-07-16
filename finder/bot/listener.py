@@ -25,10 +25,13 @@ class Incoming:
     attachments: list[dict]  # signal attachment descriptors (id, contentType, …)
 
 
-def parse_envelope(envelope: dict, user_number: str, group_internal_id: str) -> Incoming | None:
+def parse_envelope(envelope: dict, user_id: str, group_internal_id: str) -> Incoming | None:
     """Returns an Incoming for a user message in the finder group, 'dm' for a
-    1:1 from the user, None for everything else (strangers, receipts, echoes)."""
-    if envelope.get("sourceNumber") != user_number:
+    1:1 from the user, None for everything else (strangers, receipts, echoes).
+
+    user_id may be an E.164 number or an ACI uuid; envelopes carry
+    sourceNumber=null when the sender's account doesn't share its number."""
+    if user_id not in (envelope.get("sourceNumber"), envelope.get("sourceUuid")):
         return None
     data = envelope.get("dataMessage")
     if not data:
@@ -45,19 +48,19 @@ def parse_envelope(envelope: dict, user_number: str, group_internal_id: str) -> 
     return None  # some other group the bot is in
 
 
-async def run_listener(client: SignalClient, user_number: str, group: dict, handler) -> None:
+async def run_listener(client: SignalClient, user_id: str, group: dict, handler) -> None:
     """handler: async (Incoming) -> None. Reconnects with backoff forever."""
     backoff = _RECONNECT_INITIAL_S
     while True:
         try:
             async for envelope in client.receive():
                 backoff = _RECONNECT_INITIAL_S
-                inc = parse_envelope(envelope, user_number, group["internal_id"])
+                inc = parse_envelope(envelope, user_id, group["internal_id"])
                 if inc is None:
                     continue
                 if inc.text == "__dm__":
                     await client.send(
-                        user_number,
+                        user_id,
                         f"I live in the group chat — message me there \U0001f6cb",
                     )
                     continue

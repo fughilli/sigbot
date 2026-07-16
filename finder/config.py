@@ -14,7 +14,10 @@ import yaml
 class SignalConfig:
     api_url: str
     bot_number: str
-    user_number: str  # hard allowlist: the only sender the bot listens to
+    # Hard allowlist: the only sender the bot listens to. Either an E.164
+    # number or an ACI uuid — accounts with number-sharing disabled arrive
+    # with sourceNumber=null, so uuid is the reliable form.
+    user_id: str
 
 
 @dataclasses.dataclass(frozen=True)
@@ -40,7 +43,7 @@ def load(path: str | pathlib.Path = "config.yaml") -> Config:
         signal=SignalConfig(
             api_url=sig["api_url"].rstrip("/"),
             bot_number=sig["bot_number"],
-            user_number=sig["user_number"],
+            user_id=sig["user_id"],
         ),
         db_path=raw.get("db_path", "data/bot.db"),
         anthropic_api_key_env=raw.get("anthropic_api_key_env", "ANTHROPIC_API_KEY"),

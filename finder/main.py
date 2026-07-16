@@ -34,7 +34,7 @@ async def run() -> None:
     store = Store(config.db_path)
     client = SignalClient(config.signal.api_url, config.signal.bot_number)
 
-    group = await ensure_finder_group(client, store, config.signal.user_number)
+    group = await ensure_finder_group(client, store, config.signal.user_id)
     log.info("finder group ready: %s", group["send_id"])
 
     pass_fn = functools.partial(pipeline.run_pass, config, store, client, group)
@@ -52,7 +52,7 @@ async def run() -> None:
         await client.send(group["send_id"], _ONBOARDING)
         store.set_setting("onboarded", True)
 
-    await run_listener(client, config.signal.user_number, group, agent.handle)
+    await run_listener(client, config.signal.user_id, group, agent.handle)
 
 
 def main() -> None:
