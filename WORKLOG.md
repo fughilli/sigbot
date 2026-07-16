@@ -46,6 +46,13 @@ box. Milestones M0–M5 in PLAN.md §7.
   docs but expect small fixups on first real run.
 - pipeline.run_pass is an M1 stub — reports "no fetchers enabled yet".
 
+## Recent
+- Re-evaluation + coverage rework: listings re-judged when a query's
+  criteria change (criteria_hash), cached-image disk cache, progressive
+  judge coverage (deferred below-top-K carried forward), 40 new/pass,
+  reevaluate_query tool. See the commit for details.
+- Craigslist 180-char query cap fix (was 404ing the 10-keyword query).
+
 ## Next up
 1. M3 (CLIP+judge) and M4 (Facebook) both shipped but NOT yet exercised
    on a real pass. For M3: send the bot reference photos -> stored in
