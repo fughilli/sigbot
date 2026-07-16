@@ -47,15 +47,19 @@ box. Milestones M0–M5 in PLAN.md §7.
 - pipeline.run_pass is an M1 stub — reports "no fetchers enabled yet".
 
 ## Next up
-1. M3 shipped but NOT yet exercised on a real pass. User should send the
-   bot reference photos ("here are inspo pics" + attachments -> stored in
-   references/mcm-dining-chairs/) and/or confirm the query has an
-   aesthetic_description, then "run now". First scored pass downloads
-   CLIP weights (~600MB, one-time, cache/models/). Watch judgement
-   trails on the dashboard; tune clip_threshold from near-misses.
+1. M3 (CLIP+judge) and M4 (Facebook) both shipped but NOT yet exercised
+   on a real pass. For M3: send the bot reference photos -> stored in
+   references/mcm-dining-chairs/, then "run now" (first scored pass
+   downloads ~600MB CLIP weights to cache/models/). For M4: on the box,
+   `nix build .#playwright-browsers -o .playwright-browsers`, export the
+   two PLAYWRIGHT_* env vars, `bazel run //scripts:fb_login`, then enable
+   sources.facebook. FBM parser is fixture-tested only — expect the
+   embedded-JSON shape to need adjustment against a real logged-in page
+   (parse_search_payload / _iter_listing_nodes in fetchers/facebook.py).
 2. Heartbeat setting ("checked N, 0 matches" daily) — deferred from M2.
-3. M4: FBM Playwright fetcher (+ playwright-driver.browsers in flake,
-   pip playwright pinned to match).
+3. Milestones M0-M4 all code-complete. Remaining polish (PLAN M5): repost
+   tuning, signal-volume backup automation, more agent tools (e.g.
+   "retry facebook" to reset the circuit breaker manually).
 
 ## Open questions / blockers
 - End-to-end Signal verification blocked on home-box access (user runs setup).
