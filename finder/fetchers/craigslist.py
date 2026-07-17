@@ -23,38 +23,27 @@ _CATEGORY = "fua"  # furniture - all
 _MAX_DETAIL_FETCHES = 60  # per-source politeness ceiling; pipeline budget caps lower
 _IMG_RE = re.compile(r"https://images\.craigslist\.org/[^\"\s]+_600x450\.jpg")
 
-# Craigslist 404s on a `query` param longer than 180 chars (verified 2026-07;
-# 180 ok, 181 -> 404). The limit is on the decoded string, so we cap the
-# joined keyword list at whole-term boundaries.
+# One search per keyword, merged. Craigslist's `|` is NOT an OR of phrases — it
+# ORs the two adjacent WORDS while spaces AND, so joining multi-word keyword
+# phrases with `|` collapses to a near-AND query that matches almost nothing
+# (verified 2026-07: 8 joined phrases -> 14 hits; the same phrases searched
+# separately and unioned -> 541). So each keyword is its own unquoted search
+# (Craigslist's natural AND-of-words, broad) and the results are merged.
+_MAX_KEYWORD_SEARCHES = 8  # bound request volume per query per pass
+# Craigslist 404s on a `query` param longer than 180 chars; a single keyword is
+# far shorter, but guard anyway.
 _MAX_QUERY_LEN = 180
 
 
-def build_query(keywords: list[str]) -> tuple[str, list[str]]:
-    """Join keywords with '|' (Craigslist OR), keeping whole terms within the
-    180-char limit. Returns (query, dropped_keywords)."""
-    query, used = "", []
-    for kw in keywords:
-        candidate = f"{query}|{kw}" if query else kw
-        if len(candidate) > _MAX_QUERY_LEN:
-            continue  # try the next (shorter) term rather than stopping outright
-        query, _ = candidate, used.append(kw)
-    dropped = [kw for kw in keywords if kw not in used]
-    return query, dropped
-
-
-def search_url(location: dict, query_spec: dict) -> str:
+def search_url(location: dict, keyword: str, max_price: float | None = None) -> str:
     site = location.get("craigslist_site", "sfbay")
-    query, dropped = build_query(query_spec.get("keywords", []))
-    if dropped:
-        log.warning("craigslist query capped at %d chars; dropped keywords: %s",
-                    _MAX_QUERY_LEN, dropped)
     params = [
-        ("query", query),
+        ("query", keyword[:_MAX_QUERY_LEN]),
         ("postal", location.get("postal", "")),
         ("search_distance", str(int(location.get("radius_miles", 15)))),
     ]
-    if query_spec.get("max_price"):
-        params.append(("max_price", str(int(query_spec["max_price"]))))
+    if max_price:
+        params.append(("max_price", str(int(max_price))))
     qs = str(httpx.QueryParams([(k, v) for k, v in params if v]))
     return f"https://{site}.craigslist.org/search/{_CATEGORY}?{qs}"
 
@@ -131,10 +120,27 @@ class CraigslistFetcher:
         self.client = client or base.make_client()
 
     async def search(self, location: dict, query_spec: dict) -> list[dict]:
-        url = search_url(location, query_spec)
-        log.info("craigslist search: %s", url)
-        r = await base.polite_get(self.client, url)
-        return parse_search(r.text)
+        """One search per keyword (up to _MAX_KEYWORD_SEARCHES), merged by id.
+        A single keyword failing doesn't sink the rest."""
+        keywords = query_spec.get("keywords", [])
+        max_price = query_spec.get("max_price")
+        if len(keywords) > _MAX_KEYWORD_SEARCHES:
+            log.info("craigslist: %d keywords, searching first %d",
+                     len(keywords), _MAX_KEYWORD_SEARCHES)
+        merged: dict[str, dict] = {}
+        for keyword in keywords[:_MAX_KEYWORD_SEARCHES]:
+            url = search_url(location, keyword, max_price)
+            log.info("craigslist search %r", keyword)
+            try:
+                r = await base.polite_get(self.client, url)
+            except httpx.HTTPError as e:
+                log.warning("craigslist search failed for %r: %s", keyword, e)
+                continue
+            for row in parse_search(r.text):
+                merged.setdefault(row["id"], row)
+        log.info("craigslist: %d unique listings across %d keyword searches",
+                 len(merged), min(len(keywords), _MAX_KEYWORD_SEARCHES))
+        return list(merged.values())
 
     async def detail(self, row: dict) -> dict:
         r = await base.polite_get(self.client, row["url"])
