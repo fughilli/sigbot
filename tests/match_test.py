@@ -221,6 +221,41 @@ def test_criteria_change_reevaluates_without_refetch(tmp_path):
     assert "walnut, great" in signal2.sent[0]
 
 
+def test_reports_near_misses_when_nothing_matches_on_manual_run(tmp_path):
+    rows = [listing(1), listing(2)]
+    scorer = FakeScorer({
+        "http://img/1.jpg": {"score": 0.35, "visual": 0.35, "text": 0.3, "refs": 1},
+        "http://img/2.jpg": {"score": 0.28, "visual": 0.28, "text": 0.2, "refs": 1},
+    })
+    # judge rejects both
+    judge = FakeJudge({
+        "craigslist:1": {"match": False, "confidence": 0.6, "reason": "no woven seat"},
+        "craigslist:2": {"match": False, "confidence": 0.5, "reason": "wrong era"},
+    })
+    store = Store(tmp_path / "t.db")
+    store.set_setting("location", {"postal": "94103", "radius_miles": 15})
+    store.set_setting("report_empty_next", True)  # simulates run_now / reevaluate
+    store2, signal, summary = run_aesthetic_pass(tmp_path, rows, scorer, judge, store=store)
+
+    assert summary["surfaced"] == 0
+    assert len(signal.sent) == 1  # a near-miss report, not silence
+    report = signal.sent[0]
+    assert "none matched" in report and "Closest" in report
+    assert "#1" in report and "no woven seat" in report  # highest clip first
+    # flag consumed
+    assert store.get_setting("report_empty_next") is False
+
+
+def test_no_near_miss_report_on_scheduled_pass(tmp_path):
+    rows = [listing(1)]
+    scorer = FakeScorer({"http://img/1.jpg": {"score": 0.35, "visual": 0.35,
+                                             "text": 0.3, "refs": 1}})
+    judge = FakeJudge({"craigslist:1": {"match": False, "confidence": 0.6, "reason": "nope"}})
+    # report_empty_next NOT set -> scheduled pass stays quiet
+    store, signal, summary = run_aesthetic_pass(tmp_path, rows, scorer, judge)
+    assert summary["surfaced"] == 0 and signal.sent == []
+
+
 def test_unchanged_criteria_second_pass_is_noop(tmp_path):
     rows = [listing(1)]
     scorer = FakeScorer({"http://img/1.jpg": {"score": 0.3, "visual": 0.3,

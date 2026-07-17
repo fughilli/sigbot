@@ -176,6 +176,12 @@ async def run_pass(config: Config, store: Store, client: SignalClient,
     emit("pass.start", queries=[q["name"] for q in queries],
          sources=[f.name for f in fetchers])
     fetchers_by_source = {f.name: f for f in fetchers}
+    # Set by run_now / reevaluate_query: report closest near-misses to the chat
+    # when a query surfaces nothing, so a manual trigger is never silent.
+    # Consumed once per pass; scheduled passes leave it unset (quiet).
+    report_empty = bool(store.get_setting("report_empty_next"))
+    if report_empty:
+        store.set_setting("report_empty_next", False)
 
     def finalize(listing_id: str, chash: str) -> None:
         # Mark this listing as fully evaluated under the current criteria, so
@@ -216,6 +222,8 @@ async def run_pass(config: Config, store: Store, client: SignalClient,
         budget = spec.get("max_new_per_pass", DEFAULT_MAX_NEW_PER_PASS)
         # (listing, ref, source_name, images, clip_score) awaiting the judge.
         judge_pool: list[tuple[dict, int, str, list[bytes], float]] = []
+        surfaced_before = summary["surfaced"]
+        near_misses: list[tuple[float, int, dict, str]] = []  # (clip_score, ref, listing, reason)
 
         async def evaluate(listing: dict, ref: int, source_fetcher) -> None:
             """Run hard_filter + clip for one listing; queue survivors for the
@@ -388,7 +396,22 @@ async def run_pass(config: Config, store: Store, client: SignalClient,
                                  images[0] if images else None, reason=verdict["reason"])
                 else:
                     summary["rejected"] += 1
+                    near_misses.append((clip_score, ref, listing, verdict["reason"]))
                 finalize(listing["id"], chash)
+
+        # -- 4. explicit-run feedback: if a manual run/re-eval surfaced nothing
+        #       for this query, report the closest judged listings so the chat
+        #       isn't silent (scheduled passes stay quiet).
+        if report_empty and summary["surfaced"] == surfaced_before and near_misses:
+            near_misses.sort(key=lambda m: m[0], reverse=True)
+            lines = [f"\U0001f50d {query['name']}: judged "
+                     f"{len(near_misses)} candidate(s), none matched. Closest:"]
+            for score, ref, listing, reason in near_misses[:3]:
+                price = f"${listing['price']:.0f}" if listing.get("price") is not None else "$?"
+                lines.append(f"• #{ref} {price} {(listing.get('title') or '')[:48]}\n  {reason}")
+            lines.append("Loosen the aesthetic (or send more reference photos) if "
+                         "these look close enough.")
+            await client.send(group["send_id"], "\n".join(lines))
 
     if fb is not None:
         await fb.close()

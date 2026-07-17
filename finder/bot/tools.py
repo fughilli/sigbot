@@ -272,12 +272,14 @@ class Tools:
     def _t_run_now(self) -> dict:
         if self._trigger_run is None:
             raise ValueError("scrape runner not wired up yet")
+        self.store.set_setting("report_empty_next", True)  # give chat feedback
         return {"ok": True, "result": self._trigger_run()}
 
     def _t_reevaluate_query(self, name: str) -> dict:
         if not self.store.get_query(name):
             raise ValueError(f"no query named {name!r}")
         cleared = self.store.clear_criteria_hashes(name)
+        self.store.set_setting("report_empty_next", True)  # report near-misses if none match
         result = self._trigger_run() if self._trigger_run else "run not wired up"
         return {"ok": True, "name": name, "listings_to_reevaluate": cleared,
                 "result": result}
