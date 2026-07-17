@@ -360,7 +360,7 @@ async def run_pass(config: Config, store: Store, client: SignalClient,
             top_k = int(spec.get("judge_top_k", 8))
             judge_pool.sort(key=lambda item: item[4], reverse=True)
             active_judge = judge or judge_mod.Judge(
-                config.anthropic_api_key, config.agent_model)
+                config.anthropic_api_key, config.judge_model)
             ref_images = judge_mod.load_reference_images(ref_dir)
 
             for i, (listing, ref, source_fetcher, images, clip_score) in enumerate(judge_pool):

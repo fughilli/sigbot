@@ -25,7 +25,8 @@ class Config:
     signal: SignalConfig
     db_path: str
     anthropic_api_key_env: str = "ANTHROPIC_API_KEY"
-    agent_model: str = "claude-sonnet-4-6"
+    agent_model: str = "claude-sonnet-4-6"     # conversational bot (chat)
+    judge_model: str = "claude-haiku-4-5"      # per-listing aesthetic verdict
     sources: dict = dataclasses.field(default_factory=dict)
     dashboard: dict = dataclasses.field(
         default_factory=lambda: {"enabled": True, "host": "127.0.0.1", "port": 8090})
@@ -50,6 +51,7 @@ def load(path: str | pathlib.Path = "config.yaml") -> Config:
         db_path=raw.get("db_path", "data/bot.db"),
         anthropic_api_key_env=raw.get("anthropic_api_key_env", "ANTHROPIC_API_KEY"),
         agent_model=raw.get("agent_model", "claude-sonnet-4-6"),
+        judge_model=raw.get("judge_model", "claude-haiku-4-5"),
         sources=raw.get("sources", {"craigslist": {"enabled": True}, "facebook": {"enabled": False}}),
         dashboard={"enabled": True, "host": "127.0.0.1", "port": 8090, **raw.get("dashboard", {})},
     )

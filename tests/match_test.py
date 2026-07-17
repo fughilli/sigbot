@@ -40,7 +40,7 @@ class FakeMessages:
 
 def make_judge(payload):
     j = judge_mod.Judge.__new__(judge_mod.Judge)
-    j.model = "claude-sonnet-4-6"
+    j.model = "claude-haiku-4-5"
 
     class C:
         pass
@@ -69,6 +69,7 @@ def test_judge_builds_request_and_parses_verdict():
     assert verdict["reason"] == "walnut frame"
 
     kwargs = j.client.messages.last_kwargs
+    assert kwargs["model"] == "claude-haiku-4-5"  # judge uses the configured model
     assert kwargs["output_config"]["format"]["schema"] == judge_mod.VERDICT_SCHEMA
     blocks = kwargs["messages"][0]["content"]
     images = [b for b in blocks if b["type"] == "image"]

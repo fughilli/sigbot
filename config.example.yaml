@@ -9,7 +9,8 @@ signal:
   user_id: "+1__YOUR_NUMBER_OR_ACI_UUID__"
 db_path: data/bot.db
 anthropic_api_key_env: ANTHROPIC_API_KEY
-agent_model: claude-sonnet-4-6
+agent_model: claude-sonnet-4-6    # conversational bot (low volume)
+judge_model: claude-haiku-4-5     # per-listing aesthetic verdict (high volume — keep cheap)
 sources:
   craigslist: { enabled: true, site: sfbay }
   # Facebook Marketplace (M4): needs a one-time interactive login
