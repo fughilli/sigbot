@@ -37,18 +37,23 @@ if [[ -f sigbot.yaml && -f .env ]]; then
   say "already commissioned ($SIGBOT_HOME) — keeping existing config/secrets"
 else
   say "commissioning sigbot in $SIGBOT_HOME"
-  # `curl | bash` leaves stdin on the pipe — prompt on the terminal instead
-  if [[ ! -t 0 ]]; then
-    [[ -r /dev/tty ]] || fail "no terminal for prompts; run the script directly"
-    exec < /dev/tty
+  # Under `curl | bash`, stdin IS the script — bash reads further commands
+  # from fd 0, so `exec < /dev/tty` would make bash "execute" keystrokes and
+  # appear to hang. Prompt on a dedicated fd instead and leave fd 0 alone.
+  if [[ -t 0 ]]; then
+    exec 3<&0
+  elif [[ -r /dev/tty ]]; then
+    exec 3< /dev/tty
+  else
+    fail "no terminal for prompts; run the script directly"
   fi
 
   if [[ -f sigbot.yaml ]]; then
     say "keeping existing sigbot.yaml"
   else
-    read -rp "Bot Signal number (E.164, e.g. +15551234567): " BOT_NUMBER
+    read -u 3 -rp "Bot Signal number (E.164, e.g. +15551234567): " BOT_NUMBER
     [[ "$BOT_NUMBER" =~ ^\+[0-9]{7,15}$ ]] || fail "that doesn't look like an E.164 number"
-    read -rp "Bot display name [Botsy]: " BOT_NAME; BOT_NAME="${BOT_NAME:-Botsy}"
+    read -u 3 -rp "Bot display name [Botsy]: " BOT_NAME; BOT_NAME="${BOT_NAME:-Botsy}"
     cat > sigbot.yaml <<EOF
 # sigbot static config (commissioned $(date -u +%F) by install.sh).
 # Services (group personas), API keys, and further admins are managed in the
@@ -70,10 +75,10 @@ EOF
   if [[ -f .env ]]; then
     say "keeping existing .env"
   else
-    read -rp "Anthropic API key (sk-ant-...): " ANTHROPIC_KEY
+    read -u 3 -rp "Anthropic API key (sk-ant-...): " ANTHROPIC_KEY
     [[ -n "$ANTHROPIC_KEY" ]] || fail "an Anthropic API key is required"
-    read -rp "Dashboard admin username [admin]: " ADMIN_USER; ADMIN_USER="${ADMIN_USER:-admin}"
-    read -rsp "Dashboard admin password [generate]: " ADMIN_PASS; echo
+    read -u 3 -rp "Dashboard admin username [admin]: " ADMIN_USER; ADMIN_USER="${ADMIN_USER:-admin}"
+    read -u 3 -rsp "Dashboard admin password [generate]: " ADMIN_PASS; echo
     if [[ -z "$ADMIN_PASS" ]]; then
       ADMIN_PASS="$(head -c 12 /dev/urandom | base64 | tr -d '/+=' )"
       GENERATED=1
