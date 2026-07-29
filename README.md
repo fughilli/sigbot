@@ -1,4 +1,17 @@
-# sigbot
+<p align="center">
+  <img src="sigbot.svg" alt="sigbot" width="420">
+</p>
+
+<p align="center">
+  <a href="https://github.com/fughilli/sigbot/actions/workflows/ci.yml"><img
+    src="https://github.com/fughilli/sigbot/actions/workflows/ci.yml/badge.svg?branch=master" alt="CI"></a>
+  <a href="https://github.com/fughilli/sigbot/releases"><img
+    src="https://img.shields.io/github/v/release/fughilli/sigbot?display_name=tag&sort=semver" alt="Release"></a>
+  <a href="https://pypi.org/project/sigbot-client/"><img
+    src="https://img.shields.io/pypi/v/sigbot-client?label=sigbot-client" alt="PyPI"></a>
+  <a href="https://github.com/fughilli/sigbot/pkgs/container/sigbot"><img
+    src="https://img.shields.io/badge/ghcr.io-fughilli%2Fsigbot-1f6feb?logo=docker&logoColor=white" alt="ghcr.io image"></a>
+</p>
 
 A generic multi-persona Signal bot platform. One Signal account (configurable
 display name) joins any number of group chats; each registered group gets its

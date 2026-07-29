@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 910.04199 306.9985"
+   role="img"
+   aria-labelledby="title desc"
+   version="1.1"
+   id="svg9"
+   sodipodi:docname="sigbot.svg"
+   width="910.04199"
+   height="306.9985"
+   inkscape:version="1.3.2 (091e20e, 2023-11-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview9"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="0.66568756"
+     inkscape:cx="483.71041"
+     inkscape:cy="199.04233"
+     inkscape:window-width="1472"
+     inkscape:window-height="896"
+     inkscape:window-x="0"
+     inkscape:window-y="32"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg9" />
+  <title
+     id="title">sigbot logo</title>
+  <desc
+     id="desc">A central bot node routing messages to multiple group-chat personas.</desc>
+  <defs
+     id="defs1">
+    <style
+       id="style1">
+
+    .ink { fill:#20252b; }
+
+    .line { fill:none; stroke:#20252b; stroke-width:18; stroke-linecap:round; stroke-linejoin:round; }
+
+    .accent { fill:#3a76f0; }
+
+    .accentLine { fill:none; stroke:#3a76f0; stroke-width:18; stroke-linecap:round; stroke-linejoin:round; }
+
+    .word { font: 700 150px/1 -apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif; letter-spacing:-8px; }
+
+    .tag { font: 500 28px/1 -apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif; letter-spacing:4px; }
+
+  </style>
+  </defs>
+  <!-- icon -->
+  <g
+     transform="translate(11,-21)"
+     id="g8">
+    <!-- outer conversation bubble -->
+    <path
+       class="line"
+       d="m 52,29.999997 h 250 c 30,0 54,24 54,54 V 210 c 0,30 -24,54 -54,54 H 178 l -70,55 15,-55 H 52 C 22,264 -2,240 -2,210 V 83.999997 c 0,-30 24,-54 54,-54 z"
+       id="path1" />
+    <!-- central router/bot -->
+    <rect
+       x="124"
+       y="122"
+       width="108"
+       height="92"
+       rx="28"
+       class="accent"
+       id="rect1" />
+    <circle
+       cx="158"
+       cy="166"
+       r="9"
+       fill="#ffffff"
+       id="circle1" />
+    <circle
+       cx="198"
+       cy="166"
+       r="9"
+       fill="#ffffff"
+       id="circle2" />
+    <path
+       d="m 155,192 h 46"
+       stroke="#ffffff"
+       stroke-width="10"
+       stroke-linecap="round"
+       id="path2" />
+    <path
+       class="accentLine"
+       d="m 178,127.32708 v -11.3641"
+       id="path3" />
+    <circle
+       cx="178"
+       cy="89"
+       r="14.20405"
+       class="accent"
+       id="circle3"
+       style="stroke-width:1.42041" />
+    <!-- routed personas / groups -->
+    <path
+       class="accentLine"
+       d="M 124,168 H 81"
+       id="path4" />
+    <path
+       class="accentLine"
+       d="m 232,148 h 43"
+       id="path5" />
+    <path
+       class="accentLine"
+       d="m 232,188 h 43"
+       id="path6" />
+    <circle
+       cx="65"
+       cy="168"
+       r="18"
+       class="ink"
+       id="circle6" />
+    <circle
+       cx="293"
+       cy="148"
+       r="18"
+       class="ink"
+       id="circle7" />
+    <circle
+       cx="293"
+       cy="188"
+       r="18"
+       class="ink"
+       id="circle8" />
+  </g>
+  <!-- wordmark -->
+  <text
+     x="432"
+     y="194.99095"
+     class="word accent"
+     id="text8"
+     style="font-style:normal;font-variant:normal;font-weight:700;font-stretch:normal;font-size:150px;line-height:1;font-family:'-apple-system', BlinkMacSystemFont, 'Segoe UI', sans-serif">sig<tspan
+   class="ink"
+   id="tspan8">bot</tspan></text>
+</svg>
