@@ -6,7 +6,10 @@ signal:
   bot_number: "+1__BOT_NUMBER__"
 bot_name: Botsy                  # the account's Signal profile display name
 db_path: data/sigbot.db
-anthropic_api_key_env: ANTHROPIC_API_KEY
+# Anthropic key — first match wins:
+# anthropic_api_key: sk-ant-...            # inline (config file is a secret then!)
+# anthropic_api_key_file: credentials/anthropic.key   # path, relative to --workdir
+anthropic_api_key_env: ANTHROPIC_API_KEY   # env var fallback (default)
 default_model: claude-sonnet-4-6 # per-service override in the dashboard
 api:
   host: 0.0.0.0                  # published ports reach the container eth0, not loopback

@@ -14,6 +14,7 @@ load("@rules_python//python:defs.bzl", "py_test")
         "sigbot_listener_test",
         "sigbot_agent_test",
         "sigbot_api_test",
+        "sigbot_config_test",
     ]
 ]
 
