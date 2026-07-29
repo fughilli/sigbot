@@ -31,3 +31,7 @@ result
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Python build artifacts
+client/build/
+*.egg-info/
