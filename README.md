@@ -1,4 +1,4 @@
-# signal-ai-bot (sigbot)
+# sigbot
 
 A generic multi-persona Signal bot platform. One Signal account (configurable
 display name) joins any number of group chats; each registered group gets its
@@ -18,7 +18,7 @@ CI publishes multi-arch (amd64/arm64) images to `ghcr.io/fughilli/sigbot`.
 On any box with docker:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/fughilli/signal-ai-bot/master/deploy/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/fughilli/sigbot/master/deploy/install.sh | bash
 ```
 
 (While this repo is private: `docker login ghcr.io` first, and fetch the
@@ -105,13 +105,13 @@ External bots consume the service API two ways:
   `bazel build //client:sigbot_client_wheel` (or, without bazel,
   `scripts/build_client_wheel.sh`). See [client/README.md](client/README.md).
 - **bazel module**: depend on this repo and use
-  `@signal_ai_bot//client:sigbot_client_lib`:
+  `@sigbot//client:sigbot_client_lib`:
 
   ```starlark
-  bazel_dep(name = "signal_ai_bot", version = "0.0.0")
+  bazel_dep(name = "sigbot", version = "0.0.0")
   git_override(
-      module_name = "signal_ai_bot",
-      remote = "git@github.com:fughilli/signal-ai-bot.git",
+      module_name = "sigbot",
+      remote = "git@github.com:fughilli/sigbot.git",
       commit = "...",
   )
   ```

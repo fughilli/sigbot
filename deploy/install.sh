@@ -3,7 +3,7 @@
 # (config + secrets), and starts signal-cli-rest-api + sigbot under docker
 # compose. Safe to re-run: commissioning is skipped if config already exists.
 #
-#   curl -fsSL https://raw.githubusercontent.com/fughilli/signal-ai-bot/master/deploy/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/fughilli/sigbot/master/deploy/install.sh | bash
 #
 # Env overrides: SIGBOT_HOME (default ~/sigbot), SIGBOT_IMAGE, SIGNAL_IMAGE.
 set -euo pipefail

@@ -8,7 +8,7 @@ persona services, key-scoped service API + admin dashboard). The furniture
 finder that used to live here was split into its own repo on 2026-07-29:
 github.com/fughilli/marketplace-finder-bot (checked out, gitignored, at
 ./marketplace-finder-bot in this container). It consumes
-@signal_ai_bot//client:sigbot_client_lib via bazel git_override.
+@sigbot//client:sigbot_client_lib via bazel git_override.
 
 ## State of play
 - **Everything runs inside the dev container, Nix-managed** (no docker):
@@ -44,8 +44,8 @@ github.com/fughilli/marketplace-finder-bot (checked out, gitignored, at
 - marketplace-finder-bot: full finder implementation + its tests, PLAN.md,
   playwright flake, systemd unit. finder/notify/sigbot_api.py now wraps
   sigbot_client.ServiceClient (asyncio.to_thread) from
-  @signal_ai_bot//client:sigbot_client_lib via git_override (pinned commit).
-  Local dev override: bazel --override_module=signal_ai_bot=/workspace.
+  @sigbot//client:sigbot_client_lib via git_override (pinned commit).
+  Local dev override: bazel --override_module=sigbot=/workspace.
 - PUSH STATUS: see end-of-session notes / chat — container had no git
   credentials (credentials/ only has anthropic.key; no ssh key, no token).
 

@@ -1,5 +1,5 @@
 module(
-    name = "signal_ai_bot",
+    name = "sigbot",
     version = "0.0.0",
     compatibility_level = 1,
 )
