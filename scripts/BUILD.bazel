@@ -3,11 +3,5 @@ load("@rules_python//python:defs.bzl", "py_binary")
 py_binary(
     name = "setup_signal",
     srcs = ["setup_signal.py"],
-    deps = ["@pypi//httpx"],
-)
-
-py_binary(
-    name = "fb_login",
-    srcs = ["fb_login.py"],
-    deps = ["@pypi//playwright"],
+    deps = ["@sigbot_pypi//httpx"],
 )

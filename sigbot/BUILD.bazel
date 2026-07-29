@@ -7,11 +7,11 @@ py_library(
     srcs = glob(["*.py"], exclude = ["main.py", "admin_cli.py"]),
     data = glob(["static/*.html"]),
     deps = [
-        "@pypi//aiohttp",
-        "@pypi//anthropic",
-        "@pypi//httpx",
-        "@pypi//pyyaml",
-        "@pypi//websockets",
+        "@sigbot_pypi//aiohttp",
+        "@sigbot_pypi//anthropic",
+        "@sigbot_pypi//httpx",
+        "@sigbot_pypi//pyyaml",
+        "@sigbot_pypi//websockets",
     ],
 )
 

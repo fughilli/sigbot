@@ -1,5 +1,5 @@
 {
-  description = "signal-ai-bot dev shell and native Signal services";
+  description = "sigbot dev shell and native Signal services";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -63,24 +63,12 @@
         packages = {
           inherit signal-cli-rest-api signal-services;
           default = signal-services;
-          # Pinned Chromium + system libs for Playwright (FBM fetcher). The pip
-          # `playwright` pin in requirements.in (1.61.0) MUST match nixpkgs'
-          # python playwright (also 1.61.0 — the driver package's own version
-          # string is 1.61.1, ignore it). Bump both together. Build with:
-          #   nix build .#playwright-browsers -o .playwright-browsers
-          # then export PLAYWRIGHT_BROWSERS_PATH=$PWD/.playwright-browsers and
-          # PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=true (the systemd unit
-          # and scripts/fb_login.py do this).
-          playwright-browsers = pkgs.playwright-driver.browsers;
         };
 
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
             bazelisk
-            gallery-dl
           ];
-          PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";
-          PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true";
         };
       });
 }

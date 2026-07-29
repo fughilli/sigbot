@@ -1,119 +1,27 @@
 load("@rules_python//python:defs.bzl", "py_test")
 
-py_test(
-    name = "smoke_test",
-    srcs = ["smoke_test.py"],
-    deps = [
-        "//finder:finder_lib",
-        "@pypi//pytest",
-    ],
-)
-
-py_test(
-    name = "craigslist_test",
-    srcs = ["craigslist_test.py"],
-    data = glob(["fixtures/*.html"]),
-    deps = [
-        "//finder:finder_lib",
-        "@pypi//pytest",
-    ],
-)
-
-py_test(
-    name = "pipeline_test",
-    srcs = ["pipeline_test.py"],
-    deps = [
-        "//finder:finder_lib",
-        "@pypi//pytest",
-    ],
-)
-
-py_test(
-    name = "facebook_test",
-    srcs = ["facebook_test.py"],
-    deps = [
-        "//finder:finder_lib",
-        "@pypi//pytest",
-    ],
-)
-
-py_test(
-    name = "match_test",
-    srcs = ["match_test.py"],
-    deps = [
-        "//finder:finder_lib",
-        "@pypi//pytest",
-    ],
-)
-
-py_test(
-    name = "listener_test",
-    srcs = ["listener_test.py"],
-    deps = [
-        "//finder:finder_lib",
-        "@pypi//pytest",
-    ],
-)
-
-py_test(
-    name = "store_test",
-    srcs = ["store_test.py"],
-    deps = [
-        "//finder:finder_lib",
-        "@pypi//pytest",
-    ],
-)
-
-py_test(
-    name = "tools_test",
-    srcs = ["tools_test.py"],
-    deps = [
-        "//finder:finder_lib",
-        "@pypi//pytest",
-    ],
-)
-
-py_test(
-    name = "sigbot_store_test",
-    srcs = ["sigbot_store_test.py"],
-    deps = [
-        "//sigbot:sigbot_lib",
-        "@pypi//pytest",
-    ],
-)
-
-py_test(
-    name = "sigbot_listener_test",
-    srcs = ["sigbot_listener_test.py"],
-    deps = [
-        "//sigbot:sigbot_lib",
-        "@pypi//pytest",
-    ],
-)
-
-py_test(
-    name = "sigbot_agent_test",
-    srcs = ["sigbot_agent_test.py"],
-    deps = [
-        "//sigbot:sigbot_lib",
-        "@pypi//pytest",
-    ],
-)
-
-py_test(
-    name = "sigbot_api_test",
-    srcs = ["sigbot_api_test.py"],
-    deps = [
-        "//sigbot:sigbot_lib",
-        "@pypi//pytest",
-    ],
-)
+[
+    py_test(
+        name = name,
+        srcs = [name + ".py"],
+        deps = [
+            "//sigbot:sigbot_lib",
+            "@sigbot_pypi//pytest",
+        ],
+    )
+    for name in [
+        "sigbot_store_test",
+        "sigbot_listener_test",
+        "sigbot_agent_test",
+        "sigbot_api_test",
+    ]
+]
 
 py_test(
     name = "sigbot_client_test",
     srcs = ["sigbot_client_test.py"],
     deps = [
         "//client:sigbot_client_lib",
-        "@pypi//pytest",
+        "@sigbot_pypi//pytest",
     ],
 )

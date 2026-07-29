@@ -13,13 +13,13 @@ __pycache__/
 dist/
 
 # Runtime state (never committed)
-config.yaml
 sigbot.yaml
-cache/
 data/
-references/
-.fb-profile/
 .nix-services
+
+# The finder bot's checkout (its own git repo; see
+# github.com/fughilli/marketplace-finder-bot)
+marketplace-finder-bot/
 
 # Credentials (SSH keys, API keys)
 credentials/
@@ -27,7 +27,6 @@ credentials/
 # nix build result symlinks
 result
 .deps/
-.playwright-browsers
 
 # Claude Code local settings
 .claude/settings.local.json

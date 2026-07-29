@@ -46,3 +46,25 @@ RUN printf '%s\n' \
     'build --jobs=4' \
     >> /home/claude/.bazelrc \
     && chmod 666 /home/claude/.bazelrc
+
+# 2026-07-29: passwordless sudo so `sudo apt-get install ...` works at
+# runtime. The rule matches ALL users because the runtime user is created
+# at container start with a host-mapped UID (no fixed name to grant).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        sudo \
+    && rm -rf /var/lib/apt/lists/* \
+    && echo 'ALL ALL=(ALL:ALL) NOPASSWD:ALL' > /etc/sudoers.d/anyuser-nopasswd \
+    && chmod 0440 /etc/sudoers.d/anyuser-nopasswd
+
+# 2026-07-29: apt-install helper — `apt-install <pkg>...` installs via
+# sudo apt-get AND appends a dated RUN block to this Dockerfile, so
+# runtime installs survive the next image rebuild. Blocks append below
+# this line, keeping the layers above cached.
+COPY apt-install /usr/local/bin/apt-install
+RUN chmod 0755 /usr/local/bin/apt-install
+
+# 2026-07-29: openssh-client for git push over ssh (recorded for rebuild;
+# this session uses a nix-built openssh instead since sudo isn't live yet).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        openssh-client \
+    && rm -rf /var/lib/apt/lists/*

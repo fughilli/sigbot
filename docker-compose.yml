@@ -1,5 +1,5 @@
-# signal-cli-rest-api only; the bot itself runs as a systemd unit
-# (deploy/finder-bot.service) via `bazelisk run //finder:bot`.
+# signal-cli-rest-api only; sigbot itself runs separately
+# (`bazelisk run //sigbot:sigbot_server`).
 services:
   signal-api:
     # Keep in lockstep with the flake's signal-cli-rest-api version.
