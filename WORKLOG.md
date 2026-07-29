@@ -15,13 +15,13 @@ github.com/fughilli/marketplace-finder-bot (checked out, gitignored, at
   `nix build .#signal-services -o .nix-services` then
   `scripts/signal_api.py start --mode json-rpc` (see git history for the
   gory details: swag pin, JRE 25, seccomp blocks nested containers).
-- **LIVE right now in this container**: signal services (account
-  +15555550100, profile "Botsy"), sigbot_server
+- **LIVE right now in this container**: signal services (bot number in
+  sigbot.yaml, profile "Botsy"), sigbot_server
   (bazel-bin/sigbot/sigbot_server --workdir /workspace, log
   data/sigbot-server.log, port 8100 = named service `sigbot`), and the
   finder bot from ./marketplace-finder-bot polling with its minted key.
-  Dashboard admin is admin/<redacted-password> — CHANGE IT (//sigbot:admin
-  set-password).
+  Dashboard admin password: rotated 2026-07-29, lives OUTSIDE the repo at
+  credentials/sigbot-admin-password.txt (gitignored dir; never commit it).
 - The 🛋 Furniture Finder group is registered as service 'furniture-finder'
   (respond_to=none, prefix off) in data/sigbot.db; the finder's key is in
   marketplace-finder-bot/config.yaml. End-to-end user-message round trip
