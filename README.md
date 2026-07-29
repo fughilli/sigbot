@@ -28,12 +28,13 @@ script with an authenticated clone instead of raw curl.)
 
 The script pulls the image, runs **commissioning** — prompts for the bot
 number/name, Anthropic API key, and dashboard admin credentials, then writes
-`~/sigbot/sigbot.yaml` plus a mode-600 `.env` with the secrets — and installs
+`~/.config/sigbot/sigbot.yaml` plus a mode-600 `.env` with the secrets — and installs
 the **`sigbot-d`** command. Nothing starts until you run:
 
 ```sh
-sigbot-d ~/sigbot          # start detached (data dir on the command line)
-sigbot-d status ~/sigbot   # …plus stop / logs
+sigbot-d                        # start detached (default dir ~/.config/sigbot)
+sigbot-d status                 # …plus stop / logs
+sigbot-d /path/to/other-dir     # or point any command at another instance
 ```
 
 `sigbot-d` runs the container in the background with docker's restart policy;

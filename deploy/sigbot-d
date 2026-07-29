@@ -2,10 +2,12 @@
 # sigbot-d: run the sigbot container (bot + bundled signal-cli-rest-api) in
 # the background against a commissioned data dir (see install.sh).
 #
-#   sigbot-d <data-dir>            start detached (docker restart policy keeps it up)
-#   sigbot-d stop <data-dir>       stop and remove the container
-#   sigbot-d logs <data-dir>       follow logs
-#   sigbot-d status <data-dir>     show container state
+#   sigbot-d [data-dir]            start detached (docker restart policy keeps it up)
+#   sigbot-d stop [data-dir]       stop and remove the container
+#   sigbot-d logs [data-dir]       follow logs
+#   sigbot-d status [data-dir]     show container state
+#
+# data-dir defaults to ~/.config/sigbot (XDG_CONFIG_HOME respected).
 #
 # Env overrides: SIGBOT_IMAGE (default ghcr.io/fughilli/sigbot:latest),
 #   SIGBOT_PORT (dashboard/API, default 8100),
@@ -16,15 +18,18 @@ IMAGE="${SIGBOT_IMAGE:-ghcr.io/fughilli/sigbot:latest}"
 PORT="${SIGBOT_PORT:-8100}"
 SIGNAL_PORT="${SIGNAL_PORT:-8080}"
 
-usage() { echo "usage: sigbot-d [stop|logs|status] <data-dir>" >&2; exit 2; }
+DEFAULT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/sigbot"
+
+usage() { echo "usage: sigbot-d [stop|logs|status] [data-dir]  (default: $DEFAULT_DIR)" >&2; exit 2; }
 
 cmd=start
 case "${1:-}" in
   stop|logs|status) cmd="$1"; shift ;;
   -h|--help) usage ;;
 esac
-[[ $# -eq 1 ]] || usage
-dir="$(cd "$1" 2>/dev/null && pwd)" || { echo "error: no such directory: $1" >&2; exit 1; }
+[[ $# -le 1 ]] || usage
+raw_dir="${1:-$DEFAULT_DIR}"
+dir="$(cd "$raw_dir" 2>/dev/null && pwd)" || { echo "error: no such directory: $raw_dir" >&2; exit 1; }
 # container name is stable per data dir, so several instances can coexist
 name="sigbot-$(basename "$dir" | tr -cd 'a-zA-Z0-9_-')-$(printf %s "$dir" | cksum | cut -d' ' -f1)"
 

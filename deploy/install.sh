@@ -7,12 +7,12 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/fughilli/sigbot/master/deploy/install.sh | bash
 #
-# Env overrides: SIGBOT_HOME (the data dir, default ~/sigbot), SIGBOT_IMAGE,
+# Env overrides: SIGBOT_HOME (the data dir, default ~/.config/sigbot), SIGBOT_IMAGE,
 #   SIGBOT_BIN_DIR (where sigbot-d goes; default /usr/local/bin if writable,
 #   else ~/.local/bin).
 set -euo pipefail
 
-SIGBOT_HOME="${SIGBOT_HOME:-$HOME/sigbot}"
+SIGBOT_HOME="${SIGBOT_HOME:-${XDG_CONFIG_HOME:-$HOME/.config}/sigbot}"
 SIGBOT_IMAGE="${SIGBOT_IMAGE:-ghcr.io/fughilli/sigbot:latest}"
 RAW_BASE="${SIGBOT_RAW_BASE:-https://raw.githubusercontent.com/fughilli/sigbot/master/deploy}"
 

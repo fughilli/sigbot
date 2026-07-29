@@ -73,7 +73,7 @@ github.com/fughilli/marketplace-finder-bot (checked out, gitignored, at
   yet exercised (pushes happen from host).
 - deploy/install.sh — end-user installer: commissioning (prompts bot
   number/name/anthropic key/admin creds; writes <datadir>/sigbot.yaml +
-  mode-600 .env into $SIGBOT_HOME, default ~/sigbot), installs deploy/sigbot-d
+  mode-600 .env into $SIGBOT_HOME, default ~/.config/sigbot), installs deploy/sigbot-d
   to /usr/local/bin or ~/.local/bin, pulls the image, and STARTS NOTHING.
   `sigbot-d <data-dir>` runs the container detached (docker run -d, restart
   unless-stopped, container name derived from the dir so instances coexist);
