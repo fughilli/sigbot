@@ -35,10 +35,29 @@ Two bots now: (1) **sigbot** — generic multi-persona Signal bot platform
   (`bazel test //...` 14/14). Live smoke-tested end-to-end in /tmp/sigbot-smoke:
   server boot, login, admin API, CLI-minted key used through the installed
   wheel. NOT yet run against live Signal.
-- **Not started live**: sigbot.yaml (gitignored) is prefilled with the
-  finder's account +15555550100 — finder_bot and sigbot_server must not run
-  at once on one account (both consume the same receive websocket). Register
-  a second account via scripts/setup_signal.py if both should be live.
+- **2026-07-29 (later): sigbot took over the account; finder is now an API
+  client.** All LIVE in this container right now:
+  - signal services running natively (json-rpc mode, account +15555550100,
+    profile renamed to "Botsy" per sigbot.yaml bot_name).
+  - sigbot_server running (bazel-bin/sigbot/sigbot_server --workdir
+    /workspace, log data/sigbot-server.log). Dashboard admin is
+    admin/<redacted-password> — CHANGE IT (//sigbot:admin set-password; the
+    generated one was lost to a log overwrite).
+  - finder_bot running (log data/finder-bot.log), polling sigbot's message
+    API every 2s with its minted key (config.yaml sigbot: section).
+  - The 🛋 Furniture Finder group is registered as service
+    'furniture-finder' (respond_to=none, prefix off) in data/sigbot.db;
+    end-to-end user-message round trip NOT yet verified — user should
+    message the group to confirm.
+  - Refactor details: finder/notify/signal.py + groups.py deleted;
+    finder/notify/sigbot_api.py (async httpx SigbotService) is the only
+    transport; listener polls the message log (cursor in finder store
+    'sigbot_cursor', fast-forwards on first run); config.yaml now has a
+    sigbot: section (api_url/api_key/user_id) instead of signal:.
+    sigbot grew: attachments in the message log + scoped
+    GET /api/v1/attachments/{id}, attachments_b64 on POST /api/v1/messages,
+    respond_to='none' policy, client wheel 0.2.0 (fetch_attachment, send
+    attachments).
 
 ## State of play (furniture finder)
 - **Everything runs inside the dev container, Nix-managed** (no docker):
@@ -87,13 +106,12 @@ Two bots now: (1) **sigbot** — generic multi-persona Signal bot platform
 - Craigslist 180-char query cap fix (was 404ing the 10-keyword query).
 
 ## Next up
-0. sigbot live run: start signal services (scripts/signal_api.py start
-   --mode json-rpc), decide which account sigbot uses (see above), run
-   `bazel run //sigbot:sigbot_server -- --workdir "$PWD"`, add the account to
-   a test group, register a service in the dashboard
-   (http://sigbot.<instance>.claude.localhost/), verify a persona reply and
-   an API send. Possible follow-ups: rate limits on the service API, webhook
-   push (instead of after_id polling), per-service tools.
+0. Verify the live round trip: user messages the 🛋 group; finder should
+   reply through sigbot (watch data/finder-bot.log + data/sigbot-server.log).
+   Then: register a second group + persona in the dashboard
+   (http://sigbot.<instance>.claude.localhost/) to exercise the persona path.
+   Possible follow-ups: rate limits on the service API, webhook push
+   (instead of after_id polling), per-service persona tools.
 1. M3 (CLIP+judge) and M4 (Facebook) both shipped but NOT yet exercised
    on a real pass. For M3: send the bot reference photos -> stored in
    references/mcm-dining-chairs/, then "run now" (first scored pass

@@ -48,6 +48,8 @@ def _inc(policy, mentioned):
     ("all", False, True),
     ("mention", False, False),
     ("mention", True, True),
+    ("none", True, False),   # transport-only: never replies, even mentioned
+    ("none", False, False),
 ])
 def test_should_respond(policy, mentioned, expect):
     assert should_respond(_inc(policy, mentioned)) is expect

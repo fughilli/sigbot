@@ -26,7 +26,7 @@ from finder.config import Config
 from finder.events import EventBus
 from finder.fetchers.craigslist import CraigslistFetcher
 from finder.match import judge as judge_mod
-from finder.notify.signal import SignalClient
+from finder.notify.sigbot_api import SigbotService
 from finder.store import Store
 
 log = logging.getLogger(__name__)
@@ -142,8 +142,8 @@ def format_notification(listing: dict, ref: int, reason: str | None = None) -> s
     return "\n".join(lines)
 
 
-async def run_pass(config: Config, store: Store, client: SignalClient,
-                   group: dict, bus: EventBus | None = None,
+async def run_pass(config: Config, store: Store, svc: SigbotService,
+                   bus: EventBus | None = None,
                    scorer=None, judge=None) -> dict:
     def emit(event_type: str, **data) -> None:
         if bus:
@@ -198,9 +198,9 @@ async def run_pass(config: Config, store: Store, client: SignalClient,
                 if image is None and listing.get("image_urls"):
                     image = await cached_image(source_fetcher, listing["image_urls"][0])
                 if image:
-                    await client.send_image(group["send_id"], message, image)
+                    await svc.send_image(message, image)
                 else:
-                    await client.send(group["send_id"], message)
+                    await svc.send(message)
                 store.mark_notified(listing["id"])
                 summary["surfaced"] += 1
                 emit("listing.surfaced", short_ref=ref, title=listing.get("title"))
@@ -295,8 +295,7 @@ async def run_pass(config: Config, store: Store, client: SignalClient,
                 # pipeline needn't import playwright.
                 if type(e).__name__ == "CheckpointError" and fb is not None:
                     fb.circuit.trip(str(e))
-                    await client.send(
-                        group["send_id"],
+                    await svc.send(
                         "⚠️ Facebook wants a manual login — Marketplace "
                         "paused for 24h. Run scripts/fb_login.py on the box when "
                         "convenient, then tell me to retry Facebook.")
@@ -411,7 +410,7 @@ async def run_pass(config: Config, store: Store, client: SignalClient,
                 lines.append(f"• #{ref} {price} {(listing.get('title') or '')[:48]}\n  {reason}")
             lines.append("Loosen the aesthetic (or send more reference photos) if "
                          "these look close enough.")
-            await client.send(group["send_id"], "\n".join(lines))
+            await svc.send("\n".join(lines))
 
     if fb is not None:
         await fb.close()

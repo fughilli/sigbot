@@ -13,7 +13,7 @@ import sys
 import pytest
 
 from finder import pipeline
-from finder.config import Config, SignalConfig
+from finder.config import Config, SigbotConfig
 from finder.match import judge as judge_mod
 from finder.store import Store
 
@@ -112,10 +112,10 @@ class FakeSignal:
     def __init__(self):
         self.sent = []
 
-    async def send(self, recipient, message, attachments_b64=None):
+    async def send(self, message, attachments_b64=None):
         self.sent.append(message)
 
-    async def send_image(self, recipient, message, image, mime="image/jpeg"):
+    async def send_image(self, message, image, mime="image/jpeg"):
         self.sent.append(message)
 
 
@@ -159,7 +159,7 @@ def run_aesthetic_pass(tmp_path, rows, scorer, judge, top_k=8, threshold=0.24,
                 "clip_threshold": threshold, "judge_top_k": top_k}
         spec.update(spec_overrides or {})
         store.upsert_query("mcm", spec)
-    config = Config(signal=SignalConfig(api_url="x", bot_number="+1", user_id="u"),
+    config = Config(sigbot=SigbotConfig(api_url="x", api_key="sb_test", user_id="u"),
                     db_path=str(tmp_path / "t.db"),
                     sources={"craigslist": {"enabled": True}})
     fetcher = FakeFetcher(rows)
@@ -167,7 +167,7 @@ def run_aesthetic_pass(tmp_path, rows, scorer, judge, top_k=8, threshold=0.24,
     with mock.patch.object(pipeline, "CraigslistFetcher", lambda: fetcher), \
          mock.patch.object(pipeline, "IMAGE_CACHE_DIR", tmp_path / "imgcache"):
         summary = asyncio.run(pipeline.run_pass(
-            config, store, signal, {"send_id": "g"}, scorer=scorer, judge=judge))
+            config, store, signal, scorer=scorer, judge=judge))
     return store, signal, summary
 
 

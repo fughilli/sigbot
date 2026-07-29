@@ -29,7 +29,10 @@ _STATIC = pathlib.Path(__file__).parent / "static"
 _SESSION_COOKIE = "sigbot_session"
 
 _SERVICE_PUBLIC_FIELDS = ("name", "label", "group_name", "respond_to", "prefix_label")
-_RESPOND_POLICIES = ("all", "mention")
+# 'none' = transport-only: the persona never replies; the group is driven
+# entirely through the API (e.g. an external bot process like the finder).
+_RESPOND_POLICIES = ("all", "mention", "none")
+_MAX_ATTACHMENTS = 4
 
 
 def _json_error(status: int, message: str) -> web.Response:
@@ -91,15 +94,34 @@ def build_app(store: Store, signal_client, default_model: str = "") -> web.Appli
         service = require_service(request)
         data = await _body(request)
         text = (data.get("text") or "").strip()
-        if not text:
-            return _json_error(400, "text is required")
+        attachments_b64 = data.get("attachments_b64") or []
+        if not isinstance(attachments_b64, list) or not all(
+                isinstance(a, str) for a in attachments_b64):
+            return _json_error(400, "attachments_b64 must be a list of base64/data-URI strings")
+        if len(attachments_b64) > _MAX_ATTACHMENTS:
+            return _json_error(400, f"too many attachments ({_MAX_ATTACHMENTS} max)")
+        if not text and not attachments_b64:
+            return _json_error(400, "text or attachments_b64 is required")
         if len(text) > 4000:
             return _json_error(400, "text too long (4000 chars max)")
         prefix = data.get("prefix", service["prefix_label"])
-        outgoing = f"[{service['label']}] {text}" if prefix else text
-        await app["signal"].send(service["group_send_id"], outgoing)
-        msg = store.append_message(service["id"], "out", "api", text)
+        outgoing = f"[{service['label']}] {text}" if prefix and text else text
+        await app["signal"].send(service["group_send_id"], outgoing,
+                                 attachments_b64=attachments_b64 or None)
+        msg = store.append_message(service["id"], "out", "api", text,
+                                   has_attachments=bool(attachments_b64))
         return web.json_response({"sent": True, "message": msg})
+
+    async def api_attachment(request: web.Request) -> web.Response:
+        service = require_service(request)
+        attachment_id = request.match_info["id"]
+        if not store.service_has_attachment(service["id"], attachment_id):
+            return _json_error(404, "no such attachment in this service's messages")
+        try:
+            data = await app["signal"].fetch_attachment(attachment_id)
+        except Exception as e:
+            return _json_error(502, f"signal API attachment fetch failed: {e}")
+        return web.Response(body=data, content_type="application/octet-stream")
 
     async def api_messages(request: web.Request) -> web.Response:
         service = require_service(request)
@@ -279,6 +301,7 @@ def build_app(store: Store, signal_client, default_model: str = "") -> web.Appli
     app.router.add_get("/api/v1/service", api_service)
     app.router.add_post("/api/v1/messages", api_send)
     app.router.add_get("/api/v1/messages", api_messages)
+    app.router.add_get("/api/v1/attachments/{id}", api_attachment)
 
     app.router.add_get("/admin/api/groups", admin_groups)
     app.router.add_get("/admin/api/services", admin_list_services)

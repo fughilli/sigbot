@@ -16,7 +16,6 @@ py_library(
         "@pypi//playwright",
         "@pypi//pyyaml",
         "@pypi//selectolax",
-        "@pypi//websockets",
     ],
 )
 

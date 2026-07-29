@@ -84,6 +84,7 @@
         <select name="respond_to">
           <option value="all">every message</option>
           <option value="mention">only when mentioned</option>
+          <option value="none">never (API-driven service)</option>
         </select>
       </label>
       <label>Model override (optional)
@@ -161,7 +162,7 @@ function renderServices() {
         <h3>${esc(s.name)}</h3>
         <span class="tag">${esc(s.label)}</span>
         <span class="tag">${esc(s.group_name || s.group_id)}</span>
-        <span class="tag">${s.respond_to === 'all' ? 'replies to all' : 'mention-only'}</span>
+        <span class="tag">${{all: 'replies to all', mention: 'mention-only', none: 'API-driven'}[s.respond_to] || s.respond_to}</span>
         ${s.model ? `<span class="tag">${esc(s.model)}</span>` : ''}
         ${s.enabled ? '' : '<span class="tag off">disabled</span>'}
       </div>
@@ -178,6 +179,7 @@ function renderServices() {
             <select name="respond_to">
               <option value="all" ${s.respond_to==='all'?'selected':''}>every message</option>
               <option value="mention" ${s.respond_to==='mention'?'selected':''}>only when mentioned</option>
+              <option value="none" ${s.respond_to==='none'?'selected':''}>never (API-driven service)</option>
             </select>
           </label>
           <label>Model override <input name="model" value="${esc(s.model || '')}" placeholder="(default)"></label>

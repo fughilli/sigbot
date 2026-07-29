@@ -72,6 +72,8 @@ def build_llm_messages(rows: list[dict], current_images: list[tuple[bytes, str]]
 
 
 def should_respond(inc: Incoming) -> bool:
+    """'none' services are transport-only: messages are logged for API clients
+    but the persona never replies."""
     policy = inc.service.get("respond_to", "all")
     return policy == "all" or (policy == "mention" and inc.mentioned)
 
@@ -88,7 +90,8 @@ class PersonaAgent:
         self.store.append_message(
             service["id"], "in", "signal", inc.text,
             sender=inc.sender, sender_name=inc.sender_name,
-            has_attachments=bool(inc.attachments),
+            attachments=[{"id": a.get("id"), "contentType": a.get("contentType")}
+                         for a in inc.attachments if a.get("id")],
         )
         if not should_respond(inc):
             return

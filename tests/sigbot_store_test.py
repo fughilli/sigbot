@@ -91,6 +91,19 @@ def test_admin_and_sessions(store):
     assert store.session_user(token_hash) is None
 
 
+def test_message_attachments_and_scoping(store):
+    s = _mk_service(store)
+    other = _mk_service(store, name="other", group="g2")
+    store.append_message(s["id"], "in", "signal", "look at this", sender="u1",
+                         attachments=[{"id": "att-1", "contentType": "image/jpeg"}])
+    msg = store.recent_messages(s["id"])[0]
+    assert msg["has_attachments"] and msg["attachments"][0]["id"] == "att-1"
+
+    assert store.service_has_attachment(s["id"], "att-1")
+    assert not store.service_has_attachment(s["id"], "att-2")
+    assert not store.service_has_attachment(other["id"], "att-1")  # other service
+
+
 def test_messages_and_cursor(store):
     s = _mk_service(store)
     first = store.append_message(s["id"], "in", "signal", "hi", sender="u1",

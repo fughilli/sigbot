@@ -1,18 +1,19 @@
 # signal-ai-bot
 
-Two Signal bots share this repo and its signal-cli-rest-api infrastructure:
+**sigbot** (`sigbot/`) is a generic multi-persona Signal bot platform: one
+Signal account (configurable display name) joins any number of group chats;
+each registered group gets its own *service* — a persona (member label +
+system prompt) and its own API keys. An HTTP server exposes a per-service API
+(bearer-key auth, wrapped by the installable [`sigbot-client`](client/) wheel)
+plus a login-protected admin dashboard where services are registered and keys
+are minted.
 
-- **sigbot** (`sigbot/`) — a generic multi-persona bot platform. One Signal
-  account (configurable display name) joins any number of group chats; each
-  registered group gets its own *service*: a persona (member label + system
-  prompt) and its own API keys. An HTTP server exposes a per-service API
-  (bearer-key auth, wrapped by the installable [`sigbot-client`](client/)
-  wheel) plus a login-protected admin dashboard where services are registered
-  and keys are minted. See [Generic persona bot](#generic-persona-bot-sigbot).
-- **finder** (`finder/`) — the original furniture finder: hunts local
-  marketplace listings (Craigslist; Facebook Marketplace) matching a target
-  aesthetic and chats about it in a dedicated group. Design + roadmap:
-  [PLAN.md](PLAN.md).
+**finder** (`finder/`) — the furniture finder: hunts local marketplace
+listings (Craigslist; Facebook Marketplace) matching a target aesthetic and
+chats about it in its dedicated group. It owns no Signal account: it is an
+API client of sigbot, confined by its API key to the furniture-finder group's
+service (registered with reply policy "never", so the finder alone drives
+that chat). Design + roadmap: [PLAN.md](PLAN.md).
 
 Session handoff state: [WORKLOG.md](WORKLOG.md).
 
@@ -47,9 +48,6 @@ The API client ships as a zero-dependency wheel — build it with
 `scripts/build_client_wheel.sh`, install `dist/sigbot_client-*.whl` anywhere,
 and use `sigbot_client.ServiceClient` (see [client/README.md](client/README.md)).
 
-Note: the two bots can share signal-cli-rest-api but not one account's receive
-stream — run either `finder_bot` or `sigbot_server` per account, not both.
-
 ## Furniture finder
 
 ## Prerequisites
@@ -71,21 +69,23 @@ hermetic via Bazel. The signal-cli-rest-api service runs either way:
 ```sh
 bazel test //...                          # should be green out of the box
 docker compose up -d                      #   OR: nix build .#signal-services -o .nix-services
-                                          #       && scripts/signal_api.py start --mode normal
-bazel run //scripts:setup_signal          # guided bot-account registration (§4.7)
-cp config.example.yaml config.yaml        # fill in the two numbers
+                                          #       && scripts/signal_api.py start --mode json-rpc
+bazel run //scripts:setup_signal          # guided bot-account registration (§4.7), first time only
+# 1. start sigbot (see above) — it owns the account
+# 2. add the account to your furniture-finder group; in the sigbot dashboard,
+#    register the group as a service (respond_to "never", prefix off) and mint
+#    the finder an API key
+cp config.example.yaml config.yaml        # paste key, api_url, and your user id
 export ANTHROPIC_API_KEY=...
 bazel run //finder:finder_bot -- --workdir "$PWD"
 ```
 
 `--workdir` anchors everything that must survive container restarts
-(config.yaml, `data/` incl. the SQLite DB and Signal account data,
+(config.yaml, `data/` incl. the SQLite DBs and Signal account data,
 `references/`, `cache/`); point it at a bind-mounted/persistent path.
 
-On first start the bot creates the "🛋 Furniture Finder" Signal group with you
-in it and walks you through your first search. Everything after that —
-location, radius, price caps, cadence, reference photos — is configured by
-talking to it.
+Everything conversational — location, radius, price caps, cadence, reference
+photos — is configured by talking to the finder in its group.
 
 ## Facebook Marketplace (optional)
 

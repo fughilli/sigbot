@@ -18,10 +18,13 @@ class FakeSignal:
         self.sent = []
 
     async def send(self, recipient, message, attachments_b64=None):
-        self.sent.append((recipient, message))
+        self.sent.append((recipient, message, attachments_b64))
 
     async def list_groups(self):
         return GROUPS
+
+    async def fetch_attachment(self, attachment_id):
+        return b"attachment-bytes:" + attachment_id.encode()
 
 
 class ApiTest(AioHTTPTestCase):
@@ -60,12 +63,12 @@ class ApiTest(AioHTTPTestCase):
         r = await self.client.post("/api/v1/messages", headers=self._auth(),
                                    json={"text": "deploy done"})
         assert r.status == 200
-        assert self.signal.sent == [("group.g1", "[Opsy] deploy done")]
+        assert self.signal.sent == [("group.g1", "[Opsy] deploy done", None)]
 
         r = await self.client.post("/api/v1/messages", headers=self._auth(),
                                    json={"text": "raw", "prefix": False})
         assert r.status == 200
-        assert self.signal.sent[-1] == ("group.g1", "raw")
+        assert self.signal.sent[-1] == ("group.g1", "raw", None)
 
         r = await self.client.get("/api/v1/messages", headers=self._auth())
         texts = [m["text"] for m in (await r.json())["messages"]]
@@ -73,6 +76,48 @@ class ApiTest(AioHTTPTestCase):
 
         assert (await self.client.post("/api/v1/messages", headers=self._auth(),
                                        json={"text": "  "})).status == 400
+
+    async def test_send_attachments(self):
+        img = "data:image/jpeg;base64,AAAA"
+        r = await self.client.post("/api/v1/messages", headers=self._auth(),
+                                   json={"text": "", "attachments_b64": [img],
+                                         "prefix": False})
+        assert r.status == 200  # attachment-only send is allowed
+        assert self.signal.sent[-1] == ("group.g1", "", [img])
+
+        r = await self.client.post("/api/v1/messages", headers=self._auth(),
+                                   json={"text": "x", "attachments_b64": [img] * 5})
+        assert r.status == 400  # over the attachment cap
+        r = await self.client.post("/api/v1/messages", headers=self._auth(),
+                                   json={"text": "x", "attachments_b64": "notalist"})
+        assert r.status == 400
+
+    async def test_attachment_fetch_scoped_to_service(self):
+        self.store.append_message(
+            self.service["id"], "in", "signal", "photo", sender="u1",
+            attachments=[{"id": "att-9", "contentType": "image/jpeg"}])
+        r = await self.client.get("/api/v1/attachments/att-9", headers=self._auth())
+        assert r.status == 200
+        assert await r.read() == b"attachment-bytes:att-9"
+
+        # unknown id, and a key from a different service, both 404
+        r = await self.client.get("/api/v1/attachments/other", headers=self._auth())
+        assert r.status == 404
+        other = self.store.create_service(
+            name="other", group_id="g2", group_send_id="group.g2",
+            group_name="Free Group", label="X", system_prompt="p")
+        key2, key2_hash = auth.new_api_key()
+        self.store.add_api_key(other["id"], key2_hash)
+        r = await self.client.get("/api/v1/attachments/att-9",
+                                  headers=self._auth(key2))
+        assert r.status == 404
+
+    async def test_respond_to_none_policy_accepted(self):
+        await self._login()
+        r = await self.client.patch(f"/admin/api/services/{self.service['id']}",
+                                    json={"respond_to": "none"})
+        assert r.status == 200
+        assert (await r.json())["service"]["respond_to"] == "none"
 
     async def test_messages_cursor(self):
         first = self.store.append_message(self.service["id"], "in", "signal", "hi",

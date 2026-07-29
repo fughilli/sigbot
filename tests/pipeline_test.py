@@ -4,7 +4,7 @@ import sys
 import pytest
 
 from finder import pipeline
-from finder.config import Config, SignalConfig
+from finder.config import Config, SigbotConfig
 from finder.store import Store
 
 
@@ -28,15 +28,15 @@ class FakeFetcher:
         return b"imgbytes"
 
 
-class FakeSignal:
+class FakeSigbot:
     def __init__(self):
         self.sent = []
 
-    async def send(self, recipient, message, attachments_b64=None):
-        self.sent.append((recipient, message, None))
+    async def send(self, message, attachments_b64=None):
+        self.sent.append((message, None))
 
-    async def send_image(self, recipient, message, image, mime="image/jpeg"):
-        self.sent.append((recipient, message, image))
+    async def send_image(self, message, image, mime="image/jpeg"):
+        self.sent.append((message, image))
 
 
 LISTINGS = [
@@ -58,33 +58,32 @@ def env(tmp_path, monkeypatch):
     store.set_setting("location", {"postal": "94103", "radius_miles": 15})
     store.upsert_query("mcm-couch", {"keywords": ["couch", "sofa"], "max_price": 500})
     config = Config(
-        signal=SignalConfig(api_url="http://x", bot_number="+1", user_id="u"),
+        sigbot=SigbotConfig(api_url="http://x", api_key="sb_test", user_id="u"),
         db_path=str(tmp_path / "t.db"),
         sources={"craigslist": {"enabled": True}},
     )
     fetcher = FakeFetcher(LISTINGS)
     monkeypatch.setattr(pipeline, "CraigslistFetcher", lambda: fetcher)
     monkeypatch.setattr(pipeline, "IMAGE_CACHE_DIR", tmp_path / "imgcache")
-    signal = FakeSignal()
-    group = {"send_id": "group.abc", "internal_id": "abc"}
-    yield store, config, fetcher, signal, group
+    svc = FakeSigbot()
+    yield store, config, fetcher, svc
     store.close()
 
 
-def run(config, store, signal, group):
-    return asyncio.run(pipeline.run_pass(config, store, signal, group))
+def run(config, store, svc):
+    return asyncio.run(pipeline.run_pass(config, store, svc))
 
 
 def test_pass_filters_and_notifies(env):
-    store, config, fetcher, signal, group = env
-    summary = run(config, store, signal, group)
+    store, config, fetcher, svc = env
+    summary = run(config, store, svc)
     assert summary == {"fetched": 3, "new": 3, "reevaluated": 0, "rejected": 2,
                        "surfaced": 1, "errors": 0}
 
     # the good one was surfaced with its image, message references #ref and price
-    assert len(signal.sent) == 1
-    recipient, message, image = signal.sent[0]
-    assert recipient == "group.abc" and image == b"imgbytes"
+    assert len(svc.sent) == 1
+    message, image = svc.sent[0]
+    assert image == b"imgbytes"
     assert "$300" in message and "Mid-century couch" in message
 
     good = store.get_listing_by_ref(1)
@@ -104,13 +103,13 @@ def test_pass_filters_and_notifies(env):
 
 
 def test_second_pass_is_all_dedup(env):
-    store, config, fetcher, signal, group = env
-    run(config, store, signal, group)
+    store, config, fetcher, svc = env
+    run(config, store, svc)
     first_details = fetcher.detail_calls
-    summary = run(config, store, signal, group)
+    summary = run(config, store, svc)
     assert summary["new"] == 0 and summary["surfaced"] == 0
     assert fetcher.detail_calls == first_details  # nothing refetched
-    assert len(signal.sent) == 1  # no duplicate ping
+    assert len(svc.sent) == 1  # no duplicate ping
 
 
 def test_hard_filter_phrase_keywords():
@@ -130,10 +129,10 @@ def test_hard_filter_phrase_keywords():
 def test_pass_skips_without_location(tmp_path):
     store = Store(tmp_path / "e.db")
     config = Config(
-        signal=SignalConfig(api_url="http://x", bot_number="+1", user_id="u"),
+        sigbot=SigbotConfig(api_url="http://x", api_key="sb_test", user_id="u"),
         db_path=str(tmp_path / "e.db"),
     )
-    summary = asyncio.run(pipeline.run_pass(config, store, FakeSignal(), {"send_id": "g"}))
+    summary = asyncio.run(pipeline.run_pass(config, store, FakeSigbot()))
     assert "skipped" in summary
     store.close()
 

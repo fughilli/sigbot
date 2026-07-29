@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS messages (
     sender_name TEXT,
     text        TEXT NOT NULL,
     has_attachments INTEGER NOT NULL DEFAULT 0,
+    attachments TEXT,                -- JSON list of signal descriptors (id, contentType)
     created_at  TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS messages_service ON messages(service_id, id);
@@ -90,6 +91,13 @@ class Store:
             self._db.execute("PRAGMA journal_mode=WAL")
             self._db.execute("PRAGMA foreign_keys=ON")
             self._db.executescript(_SCHEMA)
+            self._migrate()
+
+    def _migrate(self) -> None:
+        """Additive column migrations for DBs created before the column existed."""
+        have = {r["name"] for r in self._db.execute("PRAGMA table_info(messages)")}
+        if "attachments" not in have:
+            self._db.execute("ALTER TABLE messages ADD COLUMN attachments TEXT")
 
     def close(self) -> None:
         self._db.close()
@@ -274,16 +282,29 @@ class Store:
 
     def append_message(self, service_id: int, direction: str, via: str, text: str,
                        sender: str | None = None, sender_name: str | None = None,
-                       has_attachments: bool = False) -> dict:
+                       has_attachments: bool = False,
+                       attachments: list[dict] | None = None) -> dict:
+        """attachments: signal descriptors ({'id', 'contentType', …}) for
+        incoming messages, so API clients can fetch the payloads later."""
         with self._lock, self._db:
             cur = self._db.execute(
                 "INSERT INTO messages(service_id,direction,via,sender,sender_name,"
-                "text,has_attachments,created_at) VALUES(?,?,?,?,?,?,?,?)",
+                "text,has_attachments,attachments,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
                 (service_id, direction, via, sender, sender_name, text,
-                 int(has_attachments), _now()),
+                 int(has_attachments or bool(attachments)),
+                 json.dumps(attachments) if attachments else None, _now()),
             )
             row = self._db.execute("SELECT * FROM messages WHERE id=?", (cur.lastrowid,)).fetchone()
         return self._message_dict(row)
+
+    def service_has_attachment(self, service_id: int, attachment_id: str) -> bool:
+        """Whether this attachment id appears in the service's message log —
+        the scoping check for the attachment-fetch API."""
+        needle = f'%{json.dumps(attachment_id)}%'
+        row = self._db.execute(
+            "SELECT 1 FROM messages WHERE service_id=? AND attachments LIKE ? LIMIT 1",
+            (service_id, needle)).fetchone()
+        return row is not None
 
     def recent_messages(self, service_id: int, limit: int = 50,
                         after_id: int | None = None) -> list[dict]:
@@ -302,4 +323,5 @@ class Store:
     def _message_dict(row: sqlite3.Row) -> dict:
         d = dict(row)
         d["has_attachments"] = bool(d["has_attachments"])
+        d["attachments"] = json.loads(d["attachments"]) if d.get("attachments") else []
         return d

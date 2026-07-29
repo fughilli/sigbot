@@ -22,7 +22,7 @@ import urllib.parse
 import urllib.request
 
 __all__ = ["ServiceClient", "SigbotApiError"]
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 
 class SigbotApiError(Exception):
@@ -48,14 +48,19 @@ class ServiceClient:
         """This key's service: name, persona label, group name, reply policy."""
         return self._request("GET", "/api/v1/service")
 
-    def send(self, text: str, prefix: bool | None = None) -> dict:
+    def send(self, text: str, prefix: bool | None = None,
+             attachments_b64: list[str] | None = None) -> dict:
         """Post a message into the service's group chat as the bot.
 
         prefix: override the service's default for the '[label] ' prefix.
+        attachments_b64: up to 4 attachments, each a data-URI string like
+        'data:image/jpeg;base64,...' (signal-cli-rest-api format).
         """
         body: dict = {"text": text}
         if prefix is not None:
             body["prefix"] = prefix
+        if attachments_b64:
+            body["attachments_b64"] = attachments_b64
         return self._request("POST", "/api/v1/messages", body)
 
     def messages(self, limit: int = 50, after_id: int | None = None) -> list[dict]:
@@ -67,9 +72,18 @@ class ServiceClient:
         query = urllib.parse.urlencode(params)
         return self._request("GET", f"/api/v1/messages?{query}")["messages"]
 
+    def fetch_attachment(self, attachment_id: str) -> bytes:
+        """Download an attachment referenced by a message's 'attachments'
+        entries (incoming photos etc.). Scoped to this service's messages."""
+        quoted = urllib.parse.quote(attachment_id, safe="")
+        return self._request_raw("GET", f"/api/v1/attachments/{quoted}")
+
     # -- plumbing --------------------------------------------------------------
 
     def _request(self, method: str, path: str, body: dict | None = None) -> dict:
+        return json.loads(self._request_raw(method, path, body).decode())
+
+    def _request_raw(self, method: str, path: str, body: dict | None = None) -> bytes:
         req = urllib.request.Request(
             self.base_url + path,
             method=method,
@@ -82,7 +96,7 @@ class ServiceClient:
         )
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                return json.loads(resp.read().decode())
+                return resp.read()
         except urllib.error.HTTPError as e:
             raw = e.read().decode(errors="replace")
             try:

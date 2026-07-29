@@ -1,12 +1,19 @@
-# Static infra config. Copy to config.yaml (gitignored) and fill in.
-# Everything else (location, radius, cadence, queries) is configured by
-# talking to the bot on Signal.
-signal:
-  api_url: http://localhost:8080
-  bot_number: "+1__BOT_GV_NUMBER__"
-  # Your account: E.164 number, or ACI uuid if your account doesn't share
-  # its number (find it by messaging the bot once and reading the envelope).
-  user_id: "+1__YOUR_NUMBER_OR_ACI_UUID__"
+# Static infra config for the finder. Copy to config.yaml (gitignored) and
+# fill in. Everything else (location, radius, cadence, queries) is configured
+# by talking to the bot on Signal.
+#
+# The finder is an API client of sigbot (which owns the Signal account):
+# 1. add the bot account to your furniture-finder group,
+# 2. in the sigbot dashboard, register that group as a service with
+#    respond_to: "never (API-driven)" and the [label] prefix disabled,
+# 3. mint an API key for it and paste it here.
+sigbot:
+  api_url: http://localhost:8100
+  api_key: "sb___MINTED_IN_SIGBOT_DASHBOARD__"   # or set api_key_env
+  # Your account: ACI uuid (reliable), or E.164 number if your account shares
+  # its number. Find it in the sigbot dashboard's message log after messaging
+  # the group once (the 'sender' field).
+  user_id: "__YOUR_ACI_UUID_OR_NUMBER__"
 db_path: data/bot.db
 anthropic_api_key_env: ANTHROPIC_API_KEY
 agent_model: claude-sonnet-4-6    # conversational bot (low volume)

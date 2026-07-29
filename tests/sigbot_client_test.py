@@ -50,6 +50,19 @@ def test_messages_query(calls):
     assert calls[0].get_method() == "GET" and calls[0].data is None
 
 
+def test_send_attachments_body(calls):
+    bot = ServiceClient("http://host:8100", api_key="sb_abc")
+    bot.send("pic", attachments_b64=["data:image/jpeg;base64,AA"])
+    assert json.loads(calls[0].data)["attachments_b64"] == ["data:image/jpeg;base64,AA"]
+
+
+def test_fetch_attachment_raw(calls):
+    bot = ServiceClient("http://host:8100", api_key="sb_abc")
+    data = bot.fetch_attachment("att/1")  # id gets percent-encoded
+    assert isinstance(data, bytes)
+    assert calls[0].full_url == "http://host:8100/api/v1/attachments/att%2F1"
+
+
 def test_service_info(calls):
     assert ServiceClient("http://host:8100", "sb_abc").service()["name"] == "ops"
 

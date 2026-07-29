@@ -11,18 +11,18 @@ import yaml
 
 
 @dataclasses.dataclass(frozen=True)
-class SignalConfig:
-    api_url: str
-    bot_number: str
-    # Hard allowlist: the only sender the bot listens to. Either an E.164
-    # number or an ACI uuid — accounts with number-sharing disabled arrive
-    # with sourceNumber=null, so uuid is the reliable form.
+class SigbotConfig:
+    api_url: str    # sigbot service API, e.g. http://localhost:8100
+    api_key: str    # minted in the sigbot dashboard for the finder's service
+    # Hard allowlist: the only sender the bot listens to, matched against the
+    # message log's sender field (ACI uuid, or E.164 for number-sharing
+    # accounts — uuid is the reliable form).
     user_id: str
 
 
 @dataclasses.dataclass(frozen=True)
 class Config:
-    signal: SignalConfig
+    sigbot: SigbotConfig
     db_path: str
     anthropic_api_key_env: str = "ANTHROPIC_API_KEY"
     agent_model: str = "claude-sonnet-4-6"     # conversational bot (chat)
@@ -41,12 +41,15 @@ class Config:
 
 def load(path: str | pathlib.Path = "config.yaml") -> Config:
     raw = yaml.safe_load(pathlib.Path(path).read_text())
-    sig = raw["signal"]
+    sb = raw["sigbot"]
+    api_key = sb.get("api_key") or os.environ.get(sb.get("api_key_env", "FINDER_SIGBOT_API_KEY"), "")
+    if not api_key:
+        raise RuntimeError("sigbot.api_key missing (mint one in the sigbot dashboard)")
     return Config(
-        signal=SignalConfig(
-            api_url=sig["api_url"].rstrip("/"),
-            bot_number=sig["bot_number"],
-            user_id=sig["user_id"],
+        sigbot=SigbotConfig(
+            api_url=sb["api_url"].rstrip("/"),
+            api_key=api_key,
+            user_id=sb["user_id"],
         ),
         db_path=raw.get("db_path", "data/bot.db"),
         anthropic_api_key_env=raw.get("anthropic_api_key_env", "ANTHROPIC_API_KEY"),

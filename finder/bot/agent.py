@@ -13,7 +13,7 @@ import anthropic
 from finder.bot.listener import Incoming
 from finder.bot.tools import TOOL_DEFS, Tools
 from finder.config import Config
-from finder.notify.signal import SignalClient
+from finder.notify.sigbot_api import SigbotService
 from finder.store import Store
 
 log = logging.getLogger(__name__)
@@ -42,12 +42,11 @@ _IMAGE_MEDIA_TYPES = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "we
 
 
 class Agent:
-    def __init__(self, config: Config, store: Store, client: SignalClient,
-                 group: dict, tools: Tools):
+    def __init__(self, config: Config, store: Store, svc: SigbotService,
+                 tools: Tools):
         self.config = config
         self.store = store
-        self.client = client
-        self.group = group
+        self.svc = svc
         self.tools = tools
         self.anthropic = anthropic.AsyncAnthropic(api_key=config.anthropic_api_key)
 
@@ -59,7 +58,7 @@ class Agent:
             ext = _IMAGE_MEDIA_TYPES.get(media_type)
             if not ext:
                 continue
-            data = await self.client.fetch_attachment(att["id"])
+            data = await self.svc.fetch_attachment(att["id"])
             self.tools.pending_images.append((data, ext))
         if self.tools.pending_images:
             content.append(
@@ -76,7 +75,7 @@ class Agent:
 
         self.store.append_chat("user", content)
         self.store.append_chat("assistant", reply)
-        await self.client.send(self.group["send_id"], reply)
+        await self.svc.send(reply)
 
     async def _run_loop(self, messages: list[dict]) -> str:
         for _ in range(_MAX_TOOL_ROUNDS):

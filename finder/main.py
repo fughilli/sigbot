@@ -1,4 +1,9 @@
-"""Entry point: starts the Signal listener and the scrape scheduler."""
+"""Entry point: starts the sigbot-API poller and the scrape scheduler.
+
+The finder is an API client of sigbot (which owns the Signal account): its
+minted API key confines it to the furniture-finder group's service, whose
+persona is set to respond_to='none' so the finder alone drives the chat.
+"""
 
 from __future__ import annotations
 
@@ -14,8 +19,7 @@ from finder.bot.agent import Agent
 from finder.events import EventBus
 from finder.bot.listener import run_listener
 from finder.bot.tools import Tools
-from finder.notify.groups import ensure_finder_group
-from finder.notify.signal import SignalClient
+from finder.notify.sigbot_api import SigbotService
 from finder.scheduler import ScrapeScheduler
 from finder.store import Store
 from finder.web.server import start_dashboard
@@ -35,13 +39,10 @@ async def run(config_path: str) -> None:
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
     config = config_mod.load(config_path)
     store = Store(config.db_path)
-    client = SignalClient(config.signal.api_url, config.signal.bot_number)
-
-    group = await ensure_finder_group(client, store, config.signal.user_id)
-    log.info("finder group ready: %s", group["send_id"])
+    svc = SigbotService(config.sigbot.api_url, config.sigbot.api_key)
 
     bus = EventBus()
-    pass_fn = functools.partial(pipeline.run_pass, config, store, client, group, bus)
+    pass_fn = functools.partial(pipeline.run_pass, config, store, svc, bus)
     scheduler = ScrapeScheduler(store, pass_fn)
     tools = Tools(
         store,
@@ -49,7 +50,7 @@ async def run(config_path: str) -> None:
         get_status=scheduler.status,
         on_cadence_change=scheduler.apply_cadence,
     )
-    agent = Agent(config, store, client, group, tools)
+    agent = Agent(config, store, svc, tools)
 
     scheduler.start()
     if config.dashboard.get("enabled"):
@@ -57,15 +58,18 @@ async def run(config_path: str) -> None:
                               host=config.dashboard["host"],
                               port=config.dashboard["port"])
     if not store.get_setting("onboarded"):
-        await client.send(group["send_id"], _ONBOARDING)
-        store.set_setting("onboarded", True)
+        try:
+            await svc.send(_ONBOARDING)
+            store.set_setting("onboarded", True)
+        except Exception as e:
+            log.warning("onboarding send failed (%s); will retry next start", e)
 
-    await run_listener(client, config.signal.user_id, group, agent.handle)
+    await run_listener(svc, store, config.sigbot.user_id, agent.handle)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Furniture finder Signal bot",
+        description="Furniture finder Signal bot (sigbot API client)",
         epilog="All persistent artifacts (config.yaml, data/, references/, "
                "cache/) live under --workdir.",
     )
