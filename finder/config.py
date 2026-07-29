@@ -29,7 +29,7 @@ class Config:
     judge_model: str = "claude-haiku-4-5"      # per-listing aesthetic verdict
     sources: dict = dataclasses.field(default_factory=dict)
     dashboard: dict = dataclasses.field(
-        default_factory=lambda: {"enabled": True, "host": "127.0.0.1", "port": 8090})
+        default_factory=lambda: {"enabled": True, "host": "127.0.0.1", "port": 8099})
 
     @property
     def anthropic_api_key(self) -> str:
@@ -53,5 +53,5 @@ def load(path: str | pathlib.Path = "config.yaml") -> Config:
         agent_model=raw.get("agent_model", "claude-sonnet-4-6"),
         judge_model=raw.get("judge_model", "claude-haiku-4-5"),
         sources=raw.get("sources", {"craigslist": {"enabled": True}, "facebook": {"enabled": False}}),
-        dashboard={"enabled": True, "host": "127.0.0.1", "port": 8090, **raw.get("dashboard", {})},
+        dashboard={"enabled": True, "host": "127.0.0.1", "port": 8099, **raw.get("dashboard", {})},
     )

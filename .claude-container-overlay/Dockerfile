@@ -26,3 +26,23 @@ RUN target="$(readlink -f /nix/var/nix/profiles/default)" \
     && rm -rf /nix/var/nix/profiles/per-user /nix/var/nix/gcroots/per-user \
     && ln -sfn "$target" /nix/var/nix/profiles/default
 ENV PATH=/nix/var/nix/profiles/default/bin:$PATH
+
+# The Determinate installer wipes /home/claude during a fresh install (the
+# 2026-07-16 base ships an empty /nix, so this now runs for real). At build
+# time nothing recreates it — the base image's entrypoint only re-runs
+# `useradd` at container startup — so recreate it here, world-accessible:
+# the runtime uid follows the host user (1000 on Linux, 501 on macOS), so a
+# hardcoded chown locks the actual user out after a host change.
+RUN mkdir -p /home/claude && chmod 777 /home/claude
+
+# Bazel 7.7.1's bundled JDK 21.0.5 SIGILLs on Armv9 SVE (M-series host,
+# JDK-8345296); disable SVE for the bazel server JVM. Cap heap and
+# parallelism too — the 4GB container OOM-kills the server during the
+# initial parallel torch/CUDA wheel downloads otherwise.
+RUN printf '%s\n' \
+    'startup --host_jvm_args=-XX:UseSVE=0' \
+    'startup --host_jvm_args=-Xmx1g' \
+    'common --loading_phase_threads=4' \
+    'build --jobs=4' \
+    >> /home/claude/.bazelrc \
+    && chmod 666 /home/claude/.bazelrc

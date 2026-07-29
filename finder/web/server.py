@@ -78,7 +78,7 @@ def build_app(store: Store, bus: EventBus, scheduler=None) -> web.Application:
 
 
 async def start_dashboard(store: Store, bus: EventBus, scheduler=None,
-                          host: str = "127.0.0.1", port: int = 8090) -> web.AppRunner:
+                          host: str = "127.0.0.1", port: int = 8099) -> web.AppRunner:
     runner = web.AppRunner(build_app(store, bus, scheduler), access_log=None)
     await runner.setup()
     site = web.TCPSite(runner, host, port)

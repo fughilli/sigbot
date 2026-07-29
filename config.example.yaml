@@ -18,4 +18,4 @@ sources:
   # (nix build .#playwright-browsers -o .playwright-browsers). Best effort —
   # a login wall trips a 24h circuit breaker and pings the group.
   facebook: { enabled: false, profile_dir: .fb-profile/ }
-dashboard: { enabled: true, host: 0.0.0.0, port: 8090 }  # 0.0.0.0: published ports reach the container eth0, not its loopback
+dashboard: { enabled: true, host: 0.0.0.0, port: 8099 }  # 0.0.0.0: published ports reach the container eth0, not its loopback
