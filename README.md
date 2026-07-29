@@ -14,7 +14,9 @@ Session handoff state: [WORKLOG.md](WORKLOG.md).
 
 ## Install (prebuilt images — no bazel needed)
 
-CI publishes multi-arch (amd64/arm64) images to `ghcr.io/fughilli/sigbot`.
+CI publishes a multi-arch (amd64/arm64) image to `ghcr.io/fughilli/sigbot`
+that bundles the whole stack: sigbot **plus** signal-cli-rest-api/signal-cli
+(built on the upstream bbernhard image), supervised by one entrypoint.
 On any box with docker:
 
 ```sh
@@ -24,12 +26,12 @@ curl -fsSL https://raw.githubusercontent.com/fughilli/sigbot/master/deploy/insta
 (While this repo is private: `docker login ghcr.io` first, and fetch the
 script with an authenticated clone instead of raw curl.)
 
-The script pulls the images, runs **commissioning** — prompts for the bot
+The script pulls the image, runs **commissioning** — prompts for the bot
 number/name, Anthropic API key, and dashboard admin credentials, then writes
 `~/sigbot/data/sigbot.yaml` plus a mode-600 `.env` with the secrets — and
-starts `signal-cli-rest-api` + sigbot under docker compose. It prints the
-account-provisioning steps (register a number, or QR-link an existing
-account) and the dashboard URL. Re-running it keeps existing config.
+starts the container under docker compose. It prints the account-provisioning
+steps (register a number, or QR-link an existing account) and the dashboard
+URL. Re-running it keeps existing config.
 
 ## Building the image yourself
 
@@ -37,13 +39,17 @@ With bazelisk set up, the same image CI publishes is a target:
 
 ```sh
 bazel run //sigbot:image_load        # loads sigbot:latest into docker
-docker run --rm -v "$PWD/data:/data" -p 8100:8100 --env-file .env sigbot:latest
+docker run --rm --env-file .env -p 8100:8100 -p 127.0.0.1:8080:8080 \
+  -v "$PWD/data:/data" -v "$PWD/data/signal-cli:/home/.local/share/signal-cli" \
+  sigbot:latest
 ```
 
-(`//sigbot:image` is the raw OCI layout; the container runs
-`sigbot_server --workdir /data`, so mount your data/ dir — with sigbot.yaml
-inside it — at `/data`. The admin CLI ships in the image at `/sigbot/admin`.)
-Or skip containers entirely and `bazel run //sigbot:sigbot_server` as below.
+(`//sigbot:image` is the raw OCI layout. The entrypoint supervises the
+bundled signal-cli-rest-api and `sigbot_server --workdir /data`; mount your
+data/ dir — with sigbot.yaml inside, `signal.api_url: http://127.0.0.1:8080`
+— at `/data`, and the signal account data as shown. The admin CLI ships at
+`/sigbot/admin`.) Or skip containers entirely and
+`bazel run //sigbot:sigbot_server` as below.
 
 ## Prerequisites (from-source path)
 

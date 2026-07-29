@@ -31,18 +31,21 @@ pip.parse(
 )
 use_repo(pip, "sigbot_pypi")
 
-# Base image for //sigbot:image. python:slim (not distroless) because
-# py_binary's stage-1 bootstrap needs a system python3 + sh; the hermetic
-# 3.12 toolchain in the runfiles does the actual work.
+# Base image for //sigbot:image: upstream signal-cli-rest-api (signal-cli,
+# JRE, per-arch libsignal all solved there). Our entrypoint supervises the
+# upstream /entrypoint.sh plus sigbot_server, so one container runs the whole
+# stack. Keep the tag in lockstep with docker-compose.yml and flake.nix.
+# python is NOT guaranteed in this base — py_binary uses the bash
+# bootstrap_impl=script (.bazelrc) with the hermetic runfiles interpreter.
 oci = use_extension("@rules_oci//oci:extensions.bzl", "oci")
 oci.pull(
-    name = "python_slim",
-    # python:3.12-slim-bookworm
-    digest = "sha256:d50fb7611f86d04a3b0471b46d7557818d88983fc3136726336b2a4c657aa30b",
-    image = "docker.io/library/python",
+    name = "signal_api_base",
+    # bbernhard/signal-cli-rest-api:0.100
+    digest = "sha256:2399d449123cdad56c4d859277e3b9127e1a00c4d2ab4601c239882609286cf8",
+    image = "docker.io/bbernhard/signal-cli-rest-api",
     platforms = [
         "linux/amd64",
         "linux/arm64/v8",
     ],
 )
-use_repo(oci, "python_slim", "python_slim_linux_amd64", "python_slim_linux_arm64_v8")
+use_repo(oci, "signal_api_base", "signal_api_base_linux_amd64", "signal_api_base_linux_arm64_v8")

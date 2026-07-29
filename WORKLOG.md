@@ -50,13 +50,18 @@ github.com/fughilli/marketplace-finder-bot (checked out, gitignored, at
   credentials (credentials/ only has anthropic.key; no ssh key, no token).
 
 ## Packaging / CI (2026-07-29)
-- //sigbot:image — OCI image (rules_oci 2.3.0 + aspect_bazel_lib tar of
-  sigbot_server + admin runfiles) on python:3.12-slim-bookworm (digest-pinned;
-  slim not distroless because py_binary stage-1 bootstrap needs system
-  python3+sh). Entrypoint `/sigbot/sigbot_server --workdir /data`; admin CLI
-  at /sigbot/admin. //sigbot:image_load for local docker; //sigbot:image_push
-  → ghcr.io/fughilli/sigbot. Payload verified by extracting app_tar and
-  running both binaries (docker can't run in this container).
+- //sigbot:image — SELF-CONTAINED stack image (2026-07-29 v2): base is
+  bbernhard/signal-cli-rest-api:0.100 (digest-pinned; solves JRE +
+  per-arch libsignal), layered with sigbot_server+admin runfiles, a
+  supervisor entrypoint (/sigbot-entrypoint.sh runs upstream /entrypoint.sh
+  + sigbot_server, exits if either dies), and a /usr/bin/python3 symlink
+  into the hermetic runfiles interpreter (base has no python; py_binary
+  stage-1 needs one; bootstrap_impl=script was tried and REVERTED — its
+  .venv symlinks break aspect tar's mtree). Mount /data (sigbot.yaml with
+  api_url http://127.0.0.1:8080) and /home/.local/share/signal-cli.
+  //sigbot:image_load for local docker; //sigbot:image_push →
+  ghcr.io/fughilli/sigbot. Verified by layer inspection + running extracted
+  binaries (docker can't run in this container).
 - //client:sigbot_client_wheel — bazel-built wheel (version duplicated in
   client/BUILD.bazel + pyproject.toml — bump both).
 - .github/workflows/ci.yml: test → per-arch image jobs (ubuntu-24.04 +

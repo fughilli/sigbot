@@ -32,7 +32,9 @@ py_binary(
 )
 
 # -- container image -----------------------------------------------------------
-# Server + admin CLI with their full runfiles trees (hermetic python included).
+# Self-contained stack: the upstream signal-cli-rest-api image as the base,
+# plus sigbot (server + admin CLI, full runfiles, hermetic python) and a
+# supervisor entrypoint that runs both processes.
 
 mtree_spec(
     name = "app_mtree",
@@ -51,16 +53,46 @@ tar(
     mtree = ":app_mtree",
 )
 
+tar(
+    name = "entrypoint_tar",
+    srcs = ["container/entrypoint.sh"],
+    mtree = [
+        "sigbot-entrypoint.sh type=file mode=0755 content=$(location container/entrypoint.sh)",
+    ],
+)
+
+# The base image has no python3, which py_binary's stage-1 bootstrap needs;
+# point it at the hermetic interpreter already shipped in the runfiles.
+# (One tar per arch — select() lives on oci_image.tars, since tar's mtree
+# attribute doesn't accept a select.)
+_PY_RUNFILES = "/sigbot/sigbot_server.runfiles/rules_python~~python~python_3_12_{arch}-unknown-linux-gnu/bin/python3"
+
+[
+    tar(
+        name = "python_link_tar_" + arch,
+        mtree = ["usr/bin/python3 type=link link=" + _PY_RUNFILES.format(arch = arch)],
+    )
+    for arch in [
+        "aarch64",
+        "x86_64",
+    ]
+]
+
 oci_image(
     name = "image",
-    base = "@python_slim",
-    entrypoint = [
-        "/sigbot/sigbot_server",
-        "--workdir",
-        "/data",
+    base = "@signal_api_base",
+    entrypoint = ["/sigbot-entrypoint.sh"],
+    exposed_ports = [
+        "8080",  # signal-cli-rest-api (account provisioning; keep loopback-only)
+        "8100",  # sigbot service API + dashboard
     ],
-    exposed_ports = ["8100"],
-    tars = [":app_tar"],
+    tars = [
+        ":app_tar",
+        ":entrypoint_tar",
+    ] + select({
+        "@platforms//cpu:aarch64": [":python_link_tar_aarch64"],
+        "@platforms//cpu:x86_64": [":python_link_tar_x86_64"],
+    }),
     visibility = ["//visibility:public"],
     workdir = "/data",
 )
