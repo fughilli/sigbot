@@ -61,23 +61,11 @@ tar(
     ],
 )
 
-# The base image has no python3, which py_binary's stage-1 bootstrap needs;
-# point it at the hermetic interpreter already shipped in the runfiles.
-# (One tar per arch — select() lives on oci_image.tars, since tar's mtree
-# attribute doesn't accept a select.)
-_PY_RUNFILES = "/sigbot/sigbot_server.runfiles/rules_python~~python~python_3_12_{arch}-unknown-linux-gnu/bin/python3"
-
-[
-    tar(
-        name = "python_link_tar_" + arch,
-        mtree = ["usr/bin/python3 type=link link=" + _PY_RUNFILES.format(arch = arch)],
-    )
-    for arch in [
-        "aarch64",
-        "x86_64",
-    ]
-]
-
+# NOTE: never ship a /usr/bin/python3 layer here. The base image's own
+# python3 runs its supervisord (which manages signal-cli-rest-api); shadowing
+# it with the hermetic interpreter breaks the whole stack. py_binary's
+# stage-1 bootstrap (#!/usr/bin/env python3) happily uses the base's python3
+# and then re-execs the hermetic interpreter from the runfiles.
 oci_image(
     name = "image",
     base = "@signal_api_base",
@@ -89,10 +77,7 @@ oci_image(
     tars = [
         ":app_tar",
         ":entrypoint_tar",
-    ] + select({
-        "@platforms//cpu:aarch64": [":python_link_tar_aarch64"],
-        "@platforms//cpu:x86_64": [":python_link_tar_x86_64"],
-    }),
+    ],
     visibility = ["//visibility:public"],
     workdir = "/data",
 )

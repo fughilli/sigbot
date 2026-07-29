@@ -35,8 +35,9 @@ use_repo(pip, "sigbot_pypi")
 # JRE, per-arch libsignal all solved there). Our entrypoint supervises the
 # upstream /entrypoint.sh plus sigbot_server, so one container runs the whole
 # stack. Keep the tag in lockstep with docker-compose.yml and flake.nix.
-# python is NOT guaranteed in this base — py_binary uses the bash
-# bootstrap_impl=script (.bazelrc) with the hermetic runfiles interpreter.
+# The base ships its own python3 (its supervisord runs on it) — py_binary's
+# stage-1 bootstrap uses it, then re-execs the hermetic runfiles interpreter.
+# Never overlay /usr/bin/python3 (see sigbot/BUILD.bazel).
 oci = use_extension("@rules_oci//oci:extensions.bzl", "oci")
 oci.pull(
     name = "signal_api_base",

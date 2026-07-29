@@ -54,10 +54,13 @@ github.com/fughilli/marketplace-finder-bot (checked out, gitignored, at
   bbernhard/signal-cli-rest-api:0.100 (digest-pinned; solves JRE +
   per-arch libsignal), layered with sigbot_server+admin runfiles, a
   supervisor entrypoint (/sigbot-entrypoint.sh runs upstream /entrypoint.sh
-  + sigbot_server, exits if either dies), and a /usr/bin/python3 symlink
-  into the hermetic runfiles interpreter (base has no python; py_binary
-  stage-1 needs one; bootstrap_impl=script was tried and REVERTED — its
-  .venv symlinks break aspect tar's mtree). Mount /data (sigbot.yaml with
+  + sigbot_server, exits if either dies), and NO python3 overlay — the
+  base SHIPS /usr/bin/python3 and its supervisord (which manages
+  signal-cli-rest-api) runs on it; a symlink layer shadowing it broke the
+  whole stack in the field (PackageNotFoundError: supervisor, crash loop).
+  Stage-1 bootstrap uses the base python3 via /usr/bin/env, then re-execs
+  the hermetic runfiles interpreter. (bootstrap_impl=script also tried and
+  REVERTED — its .venv symlinks break aspect tar's mtree.) Mount /data (sigbot.yaml with
   api_url http://127.0.0.1:8080) and /home/.local/share/signal-cli.
   //sigbot:image_load for local docker; //sigbot:image_push →
   ghcr.io/fughilli/sigbot. Verified by layer inspection + running extracted
