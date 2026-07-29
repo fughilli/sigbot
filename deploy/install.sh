@@ -26,6 +26,8 @@ cd "$SIGBOT_HOME"
 
 # -- commissioning: config + secrets, generated once ---------------------------
 
+# Each file is kept independently, so a migrated sigbot.yaml (or .env) is
+# never clobbered — only what's missing gets prompted for.
 if [[ -f sigbot.yaml && -f .env ]]; then
   say "already commissioned ($SIGBOT_HOME) — keeping existing config/secrets"
 else
@@ -35,19 +37,14 @@ else
     [[ -r /dev/tty ]] || fail "no terminal for prompts; run the script directly"
     exec < /dev/tty
   fi
-  read -rp "Bot Signal number (E.164, e.g. +15551234567): " BOT_NUMBER
-  [[ "$BOT_NUMBER" =~ ^\+[0-9]{7,15}$ ]] || fail "that doesn't look like an E.164 number"
-  read -rp "Bot display name [Botsy]: " BOT_NAME; BOT_NAME="${BOT_NAME:-Botsy}"
-  read -rp "Anthropic API key (sk-ant-...): " ANTHROPIC_KEY
-  [[ -n "$ANTHROPIC_KEY" ]] || fail "an Anthropic API key is required"
-  read -rp "Dashboard admin username [admin]: " ADMIN_USER; ADMIN_USER="${ADMIN_USER:-admin}"
-  read -rsp "Dashboard admin password [generate]: " ADMIN_PASS; echo
-  if [[ -z "$ADMIN_PASS" ]]; then
-    ADMIN_PASS="$(head -c 12 /dev/urandom | base64 | tr -d '/+=' )"
-    GENERATED=1
-  fi
 
-  cat > sigbot.yaml <<EOF
+  if [[ -f sigbot.yaml ]]; then
+    say "keeping existing sigbot.yaml"
+  else
+    read -rp "Bot Signal number (E.164, e.g. +15551234567): " BOT_NUMBER
+    [[ "$BOT_NUMBER" =~ ^\+[0-9]{7,15}$ ]] || fail "that doesn't look like an E.164 number"
+    read -rp "Bot display name [Botsy]: " BOT_NAME; BOT_NAME="${BOT_NAME:-Botsy}"
+    cat > sigbot.yaml <<EOF
 # sigbot static config (commissioned $(date -u +%F) by install.sh).
 # Services (group personas), API keys, and further admins are managed in the
 # dashboard — not in this file. This dir is mounted at /data in the container.
@@ -62,17 +59,33 @@ api:
   host: 0.0.0.0
   port: 8100
 EOF
+    say "wrote sigbot.yaml"
+  fi
 
-  cat > .env <<EOF
+  if [[ -f .env ]]; then
+    say "keeping existing .env"
+  else
+    read -rp "Anthropic API key (sk-ant-...): " ANTHROPIC_KEY
+    [[ -n "$ANTHROPIC_KEY" ]] || fail "an Anthropic API key is required"
+    read -rp "Dashboard admin username [admin]: " ADMIN_USER; ADMIN_USER="${ADMIN_USER:-admin}"
+    read -rsp "Dashboard admin password [generate]: " ADMIN_PASS; echo
+    if [[ -z "$ADMIN_PASS" ]]; then
+      ADMIN_PASS="$(head -c 12 /dev/urandom | base64 | tr -d '/+=' )"
+      GENERATED=1
+    fi
+    cat > .env <<EOF
 # sigbot secrets (chmod 600; never commit). Reset the admin password with:
 #   docker exec <container> /sigbot/admin --config /data/sigbot.yaml set-password $ADMIN_USER
+# SIGBOT_ADMIN_* only matter on first boot with an empty DB; an existing
+# sigbot.db keeps its admins regardless.
 ANTHROPIC_API_KEY=$ANTHROPIC_KEY
 SIGBOT_ADMIN_USER=$ADMIN_USER
 SIGBOT_ADMIN_PASSWORD=$ADMIN_PASS
 EOF
-  chmod 600 .env
-  say "wrote sigbot.yaml and .env (secrets, mode 600)"
-  [[ -n "${GENERATED:-}" ]] && say "generated dashboard password for '$ADMIN_USER': $ADMIN_PASS (stored in .env)"
+    chmod 600 .env
+    say "wrote .env (secrets, mode 600)"
+    [[ -n "${GENERATED:-}" ]] && say "generated dashboard password for '$ADMIN_USER': $ADMIN_PASS (stored in .env)"
+  fi
 fi
 
 # -- install the sigbot-d launcher ---------------------------------------------
