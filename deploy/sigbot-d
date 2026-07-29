@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# sigbot-d: run the sigbot container (bot + bundled signal-cli-rest-api) in
+# the background against a commissioned data dir (see install.sh).
+#
+#   sigbot-d <data-dir>            start detached (docker restart policy keeps it up)
+#   sigbot-d stop <data-dir>       stop and remove the container
+#   sigbot-d logs <data-dir>       follow logs
+#   sigbot-d status <data-dir>     show container state
+#
+# Env overrides: SIGBOT_IMAGE (default ghcr.io/fughilli/sigbot:latest),
+#   SIGBOT_PORT (dashboard/API, default 8100),
+#   SIGNAL_PORT (signal-cli-rest-api, loopback only, default 8080).
+set -euo pipefail
+
+IMAGE="${SIGBOT_IMAGE:-ghcr.io/fughilli/sigbot:latest}"
+PORT="${SIGBOT_PORT:-8100}"
+SIGNAL_PORT="${SIGNAL_PORT:-8080}"
+
+usage() { echo "usage: sigbot-d [stop|logs|status] <data-dir>" >&2; exit 2; }
+
+cmd=start
+case "${1:-}" in
+  stop|logs|status) cmd="$1"; shift ;;
+  -h|--help) usage ;;
+esac
+[[ $# -eq 1 ]] || usage
+dir="$(cd "$1" 2>/dev/null && pwd)" || { echo "error: no such directory: $1" >&2; exit 1; }
+# container name is stable per data dir, so several instances can coexist
+name="sigbot-$(basename "$dir" | tr -cd 'a-zA-Z0-9_-')-$(printf %s "$dir" | cksum | cut -d' ' -f1)"
+
+case "$cmd" in
+  stop)
+    docker rm -f "$name" >/dev/null 2>&1 && echo "stopped $name" || echo "$name was not running"
+    ;;
+  logs)
+    exec docker logs -f "$name"
+    ;;
+  status)
+    docker ps -a --filter "name=^/$name\$" --format '{{.Names}}  {{.Status}}' | grep . \
+      || echo "$name: not created (start with: sigbot-d $dir)"
+    ;;
+  start)
+    if [[ ! -f "$dir/sigbot.yaml" || ! -f "$dir/.env" ]]; then
+      echo "error: $dir is not commissioned (missing sigbot.yaml or .env) — run install.sh" >&2
+      exit 1
+    fi
+    if [[ -n "$(docker ps -q --filter "name=^/$name\$")" ]]; then
+      echo "$name already running (sigbot-d status $dir)"
+      exit 0
+    fi
+    docker rm "$name" >/dev/null 2>&1 || true   # clear a stopped leftover
+    mkdir -p "$dir/signal-cli"
+    docker run -d --name "$name" --restart unless-stopped \
+      --env-file "$dir/.env" -e MODE=json-rpc \
+      -p "$PORT:8100" -p "127.0.0.1:$SIGNAL_PORT:8080" \
+      -v "$dir:/data" \
+      -v "$dir/signal-cli:/home/.local/share/signal-cli" \
+      "$IMAGE" >/dev/null
+    echo "started $name"
+    echo "  dashboard:  http://localhost:$PORT/"
+    echo "  signal api: http://127.0.0.1:$SIGNAL_PORT/  (account provisioning)"
+    echo "  logs:       sigbot-d logs $dir"
+    ;;
+esac

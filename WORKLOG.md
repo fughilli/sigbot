@@ -72,10 +72,13 @@ github.com/fughilli/marketplace-finder-bot (checked out, gitignored, at
   private repo needs a paid arm runner or the repo flipped public. CI not
   yet exercised (pushes happen from host).
 - deploy/install.sh — end-user installer: commissioning (prompts bot
-  number/name/anthropic key/admin creds; writes ~/sigbot/data/sigbot.yaml +
-  mode-600 .env) then docker compose up of signal-api + sigbot; prints
-  account provisioning options (REST register vs qrcodelink) and dashboard
-  URL. Idempotent; reads prompts from /dev/tty so `curl | bash` works.
+  number/name/anthropic key/admin creds; writes <datadir>/sigbot.yaml +
+  mode-600 .env into $SIGBOT_HOME, default ~/sigbot), installs deploy/sigbot-d
+  to /usr/local/bin or ~/.local/bin, pulls the image, and STARTS NOTHING.
+  `sigbot-d <data-dir>` runs the container detached (docker run -d, restart
+  unless-stopped, container name derived from the dir so instances coexist);
+  also stop|logs|status. Prints provisioning options (REST register vs
+  qrcodelink). Idempotent; prompts via /dev/tty so `curl | bash` works.
 
 ## Next up
 1. Verify the live round trip: user messages the 🛋 group; finder should

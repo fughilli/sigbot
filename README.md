@@ -28,10 +28,20 @@ script with an authenticated clone instead of raw curl.)
 
 The script pulls the image, runs **commissioning** — prompts for the bot
 number/name, Anthropic API key, and dashboard admin credentials, then writes
-`~/sigbot/data/sigbot.yaml` plus a mode-600 `.env` with the secrets — and
-starts the container under docker compose. It prints the account-provisioning
-steps (register a number, or QR-link an existing account) and the dashboard
-URL. Re-running it keeps existing config.
+`~/sigbot/sigbot.yaml` plus a mode-600 `.env` with the secrets — and installs
+the **`sigbot-d`** command. Nothing starts until you run:
+
+```sh
+sigbot-d ~/sigbot          # start detached (data dir on the command line)
+sigbot-d status ~/sigbot   # …plus stop / logs
+```
+
+`sigbot-d` runs the container in the background with docker's restart policy;
+the data dir holds everything (config, secrets, SQLite DB, signal account
+data), so several instances with different data dirs can coexist
+(`SIGBOT_PORT`/`SIGNAL_PORT` env vars pick the ports). The installer prints
+the account-provisioning steps (register a number, or QR-link an existing
+account) and the dashboard URL. Re-running it keeps existing config.
 
 ## Building the image yourself
 
