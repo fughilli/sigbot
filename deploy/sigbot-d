@@ -6,6 +6,7 @@
 #   sigbot-d stop [data-dir]       stop and remove the container
 #   sigbot-d logs [data-dir]       follow logs
 #   sigbot-d status [data-dir]     show container state
+#   sigbot-d passwd [data-dir]     change the dashboard admin password (prompts)
 #
 # data-dir defaults to ~/.config/sigbot (XDG_CONFIG_HOME respected).
 #
@@ -20,11 +21,11 @@ SIGNAL_PORT="${SIGNAL_PORT:-8080}"
 
 DEFAULT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/sigbot"
 
-usage() { echo "usage: sigbot-d [stop|logs|status] [data-dir]  (default: $DEFAULT_DIR)" >&2; exit 2; }
+usage() { echo "usage: sigbot-d [stop|logs|status|passwd] [data-dir]  (default: $DEFAULT_DIR)" >&2; exit 2; }
 
 cmd=start
 case "${1:-}" in
-  stop|logs|status) cmd="$1"; shift ;;
+  stop|logs|status|passwd) cmd="$1"; shift ;;
   -h|--help) usage ;;
 esac
 [[ $# -le 1 ]] || usage
@@ -43,6 +44,19 @@ case "$cmd" in
   status)
     docker ps -a --filter "name=^/$name\$" --format '{{.Names}}  {{.Status}}' | grep . \
       || echo "$name: not created (start with: sigbot-d $dir)"
+    ;;
+  passwd)
+    # username from the data dir's .env (SIGBOT_ADMIN_USER), default admin.
+    # Writes only the PBKDF2 hash into the DB; takes effect on next login.
+    user="$(grep -E '^SIGBOT_ADMIN_USER=' "$dir/.env" 2>/dev/null | tail -1 | cut -d= -f2-)"
+    user="${user:-admin}"
+    if [[ -n "$(docker ps -q --filter "name=^/$name\$")" ]]; then
+      docker exec -it "$name" /sigbot/admin --config /data/sigbot.yaml set-password "$user"
+    else
+      # not running: one-off container against the same data dir
+      docker run --rm -it -v "$dir:/data" -w /data \
+        --entrypoint /sigbot/admin "$IMAGE" set-password "$user"
+    fi
     ;;
   start)
     if [[ ! -f "$dir/sigbot.yaml" || ! -f "$dir/.env" ]]; then

@@ -33,7 +33,7 @@ the **`sigbot-d`** command. Nothing starts until you run:
 
 ```sh
 sigbot-d                        # start detached (default dir ~/.config/sigbot)
-sigbot-d status                 # …plus stop / logs
+sigbot-d status                 # …plus stop / logs / passwd (admin password)
 sigbot-d /path/to/other-dir     # or point any command at another instance
 ```
 

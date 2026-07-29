@@ -80,7 +80,8 @@ github.com/fughilli/marketplace-finder-bot (checked out, gitignored, at
   to /usr/local/bin or ~/.local/bin, pulls the image, and STARTS NOTHING.
   `sigbot-d <data-dir>` runs the container detached (docker run -d, restart
   unless-stopped, container name derived from the dir so instances coexist);
-  also stop|logs|status. Prints provisioning options (REST register vs
+  also stop|logs|status|passwd (set-password via docker
+  exec, or a one-off container when stopped; user from .env). Prints provisioning options (REST register vs
   qrcodelink). Idempotent; prompts via /dev/tty so `curl | bash` works.
   .env stores SIGBOT_ADMIN_PASSWORD_HASH (pbkdf2, computed by the image's
   /sigbot/admin hash-password), never the plaintext; bootstrap precedence
