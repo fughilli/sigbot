@@ -6,6 +6,8 @@ module(
 
 bazel_dep(name = "rules_python", version = "2.0.3")
 bazel_dep(name = "rules_uv", version = "0.86.0")
+bazel_dep(name = "rules_oci", version = "2.3.0")
+bazel_dep(name = "aspect_bazel_lib", version = "2.22.5")
 
 # rules_nixpkgs lets Bazel import Nix-built packages as Bazel targets. Register
 # the module (pinned) so the option exists — but DO NOT declare a `nix_repo` /
@@ -28,3 +30,19 @@ pip.parse(
     requirements_lock = "//:requirements.lock",
 )
 use_repo(pip, "sigbot_pypi")
+
+# Base image for //sigbot:image. python:slim (not distroless) because
+# py_binary's stage-1 bootstrap needs a system python3 + sh; the hermetic
+# 3.12 toolchain in the runfiles does the actual work.
+oci = use_extension("@rules_oci//oci:extensions.bzl", "oci")
+oci.pull(
+    name = "python_slim",
+    # python:3.12-slim-bookworm
+    digest = "sha256:d50fb7611f86d04a3b0471b46d7557818d88983fc3136726336b2a4c657aa30b",
+    image = "docker.io/library/python",
+    platforms = [
+        "linux/amd64",
+        "linux/arm64/v8",
+    ],
+)
+use_repo(oci, "python_slim", "python_slim_linux_amd64", "python_slim_linux_arm64_v8")

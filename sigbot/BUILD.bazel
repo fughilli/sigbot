@@ -1,3 +1,5 @@
+load("@aspect_bazel_lib//lib:tar.bzl", "mtree_spec", "tar")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load", "oci_push")
 load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 
 package(default_visibility = ["//visibility:public"])
@@ -27,4 +29,53 @@ py_binary(
     srcs = ["admin_cli.py"],
     main = "admin_cli.py",
     deps = [":sigbot_lib"],
+)
+
+# -- container image -----------------------------------------------------------
+# Server + admin CLI with their full runfiles trees (hermetic python included).
+
+mtree_spec(
+    name = "app_mtree",
+    srcs = [
+        ":admin",
+        ":sigbot_server",
+    ],
+)
+
+tar(
+    name = "app_tar",
+    srcs = [
+        ":admin",
+        ":sigbot_server",
+    ],
+    mtree = ":app_mtree",
+)
+
+oci_image(
+    name = "image",
+    base = "@python_slim",
+    entrypoint = [
+        "/sigbot/sigbot_server",
+        "--workdir",
+        "/data",
+    ],
+    exposed_ports = ["8100"],
+    tars = [":app_tar"],
+    visibility = ["//visibility:public"],
+    workdir = "/data",
+)
+
+# Dev path (docker required):  bazel run //sigbot:image_load
+#   then:  docker run --rm -v "$PWD/data:/data" -p 8100:8100 sigbot:latest
+oci_load(
+    name = "image_load",
+    image = ":image",
+    repo_tags = ["sigbot:latest"],
+)
+
+# CI pushes per-arch tags; a manifest job stitches them into :latest.
+oci_push(
+    name = "image_push",
+    image = ":image",
+    repository = "ghcr.io/fughilli/sigbot",
 )

@@ -49,6 +49,29 @@ github.com/fughilli/marketplace-finder-bot (checked out, gitignored, at
 - PUSH STATUS: see end-of-session notes / chat — container had no git
   credentials (credentials/ only has anthropic.key; no ssh key, no token).
 
+## Packaging / CI (2026-07-29)
+- //sigbot:image — OCI image (rules_oci 2.3.0 + aspect_bazel_lib tar of
+  sigbot_server + admin runfiles) on python:3.12-slim-bookworm (digest-pinned;
+  slim not distroless because py_binary stage-1 bootstrap needs system
+  python3+sh). Entrypoint `/sigbot/sigbot_server --workdir /data`; admin CLI
+  at /sigbot/admin. //sigbot:image_load for local docker; //sigbot:image_push
+  → ghcr.io/fughilli/sigbot. Payload verified by extracting app_tar and
+  running both binaries (docker can't run in this container).
+- //client:sigbot_client_wheel — bazel-built wheel (version duplicated in
+  client/BUILD.bazel + pyproject.toml — bump both).
+- .github/workflows/ci.yml: test → per-arch image jobs (ubuntu-24.04 +
+  ubuntu-24.04-arm, native builds, push latest-{arch} + sha-{arch} tags on
+  master/tags) → manifest job stitches :latest/:sha/:vX with buildx
+  imagetools; wheel job uploads artifact and attaches to the release on v*
+  tags. NOTE: ubuntu-24.04-arm runners are free for PUBLIC repos only —
+  private repo needs a paid arm runner or the repo flipped public. CI not
+  yet exercised (pushes happen from host).
+- deploy/install.sh — end-user installer: commissioning (prompts bot
+  number/name/anthropic key/admin creds; writes ~/sigbot/data/sigbot.yaml +
+  mode-600 .env) then docker compose up of signal-api + sigbot; prints
+  account provisioning options (REST register vs qrcodelink) and dashboard
+  URL. Idempotent; reads prompts from /dev/tty so `curl | bash` works.
+
 ## Next up
 1. Verify the live round trip: user messages the 🛋 group; finder should
    reply through sigbot (watch marketplace-finder-bot log +

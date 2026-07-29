@@ -12,7 +12,40 @@ Bots built on the service API live in their own repos — e.g.
 which drives its group through a service registered with reply policy "never".
 Session handoff state: [WORKLOG.md](WORKLOG.md).
 
-## Prerequisites
+## Install (prebuilt images — no bazel needed)
+
+CI publishes multi-arch (amd64/arm64) images to `ghcr.io/fughilli/sigbot`.
+On any box with docker:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/fughilli/signal-ai-bot/master/deploy/install.sh | bash
+```
+
+(While this repo is private: `docker login ghcr.io` first, and fetch the
+script with an authenticated clone instead of raw curl.)
+
+The script pulls the images, runs **commissioning** — prompts for the bot
+number/name, Anthropic API key, and dashboard admin credentials, then writes
+`~/sigbot/data/sigbot.yaml` plus a mode-600 `.env` with the secrets — and
+starts `signal-cli-rest-api` + sigbot under docker compose. It prints the
+account-provisioning steps (register a number, or QR-link an existing
+account) and the dashboard URL. Re-running it keeps existing config.
+
+## Building the image yourself
+
+With bazelisk set up, the same image CI publishes is a target:
+
+```sh
+bazel run //sigbot:image_load        # loads sigbot:latest into docker
+docker run --rm -v "$PWD/data:/data" -p 8100:8100 --env-file .env sigbot:latest
+```
+
+(`//sigbot:image` is the raw OCI layout; the container runs
+`sigbot_server --workdir /data`, so mount your data/ dir — with sigbot.yaml
+inside it — at `/data`. The admin CLI ships in the image at `/sigbot/admin`.)
+Or skip containers entirely and `bazel run //sigbot:sigbot_server` as below.
+
+## Prerequisites (from-source path)
 
 [Bazelisk](https://github.com/bazelbuild/bazelisk) and
 [Determinate Nix](https://install.determinate.systems); everything else is
@@ -67,8 +100,10 @@ list-services|mint-key|revoke-key` (run with the workdir as cwd).
 
 External bots consume the service API two ways:
 
-- **pip**: `scripts/build_client_wheel.sh` builds the zero-dependency
-  `dist/sigbot_client-*.whl`; see [client/README.md](client/README.md).
+- **pip**: grab `sigbot_client-*.whl` from the GitHub releases page (CI
+  attaches it on version tags), or build it yourself:
+  `bazel build //client:sigbot_client_wheel` (or, without bazel,
+  `scripts/build_client_wheel.sh`). See [client/README.md](client/README.md).
 - **bazel module**: depend on this repo and use
   `@signal_ai_bot//client:sigbot_client_lib`:
 

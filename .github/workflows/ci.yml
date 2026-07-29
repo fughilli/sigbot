@@ -1,0 +1,100 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: write # release asset uploads
+  packages: write # ghcr image pushes
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/sigbot
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            .bazel-disk-cache
+            .bazel-repo-cache
+          key: bazel-test-${{ hashFiles('.bazelversion', 'MODULE.bazel', 'requirements.lock') }}
+          restore-keys: bazel-test-
+      - run: bazel test //...
+
+  # Per-arch native builds (no cross-compiling python wheels): each runner
+  # builds and pushes its own architecture's image.
+  image:
+    needs: test
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            .bazel-disk-cache
+            .bazel-repo-cache
+          key: bazel-image-${{ matrix.arch }}-${{ hashFiles('.bazelversion', 'MODULE.bazel', 'requirements.lock') }}
+          restore-keys: bazel-image-${{ matrix.arch }}-
+      - run: bazel build //sigbot:image
+      - name: push per-arch tags
+        if: github.event_name == 'push'
+        run: |
+          echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
+          bazel run //sigbot:image_push -- \
+            --repository "$IMAGE" \
+            --tag "latest-${{ matrix.arch }}" \
+            --tag "${GITHUB_SHA::7}-${{ matrix.arch }}"
+
+  # Stitch the per-arch images into multi-arch manifest tags.
+  manifest:
+    needs: image
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: create multi-arch manifests
+        run: |
+          echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
+          docker buildx imagetools create -t "$IMAGE:latest" -t "$IMAGE:${GITHUB_SHA::7}" \
+            "$IMAGE:latest-amd64" "$IMAGE:latest-arm64"
+          if [[ '${{ github.ref_type }}' == 'tag' ]]; then
+            docker buildx imagetools create -t "$IMAGE:${{ github.ref_name }}" \
+              "$IMAGE:latest-amd64" "$IMAGE:latest-arm64"
+          fi
+
+  wheel:
+    needs: test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            .bazel-disk-cache
+            .bazel-repo-cache
+          key: bazel-test-${{ hashFiles('.bazelversion', 'MODULE.bazel', 'requirements.lock') }}
+          restore-keys: bazel-test-
+      - run: bazel build //client:sigbot_client_wheel
+      - run: cp bazel-bin/client/sigbot_client-*.whl .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sigbot-client-wheel
+          path: sigbot_client-*.whl
+      - name: attach wheel to release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: sigbot_client-*.whl
+          generate_release_notes: true

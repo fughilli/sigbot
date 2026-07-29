@@ -1,11 +1,26 @@
 load("@rules_python//python:defs.bzl", "py_library")
+load("@rules_python//python:packaging.bzl", "py_wheel")
 
 package(default_visibility = ["//visibility:public"])
 
-# In-repo target for the wheel's package (tests import it). The installable
-# artifact is built with pip, not bazel:  pip wheel --no-deps ./client -w dist/
+# In-repo target for the wheel's package; bazel-module consumers depend on
+# this directly (@signal_ai_bot//client:sigbot_client_lib).
 py_library(
     name = "sigbot_client_lib",
     srcs = ["sigbot_client/__init__.py"],
     imports = ["."],
+)
+
+# The installable artifact:  bazel build //client:sigbot_client_wheel
+# (scripts/build_client_wheel.sh remains as the pip-based alternative).
+# Keep version in sync with pyproject.toml and sigbot_client.__version__.
+py_wheel(
+    name = "sigbot_client_wheel",
+    distribution = "sigbot-client",
+    python_requires = ">=3.9",
+    python_tag = "py3",
+    strip_path_prefixes = ["client"],
+    summary = "Client for the sigbot per-group-chat service API (stdlib-only)",
+    version = "0.2.0",
+    deps = [":sigbot_client_lib"],
 )
