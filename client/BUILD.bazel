@@ -1,0 +1,11 @@
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# In-repo target for the wheel's package (tests import it). The installable
+# artifact is built with pip, not bazel:  pip wheel --no-deps ./client -w dist/
+py_library(
+    name = "sigbot_client_lib",
+    srcs = ["sigbot_client/__init__.py"],
+    imports = ["."],
+)

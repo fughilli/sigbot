@@ -1,0 +1,30 @@
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+
+package(default_visibility = ["//visibility:public"])
+
+py_library(
+    name = "sigbot_lib",
+    srcs = glob(["*.py"], exclude = ["main.py", "admin_cli.py"]),
+    data = glob(["static/*.html"]),
+    deps = [
+        "@pypi//aiohttp",
+        "@pypi//anthropic",
+        "@pypi//httpx",
+        "@pypi//pyyaml",
+        "@pypi//websockets",
+    ],
+)
+
+py_binary(
+    name = "sigbot_server",
+    srcs = ["main.py"],
+    main = "main.py",
+    deps = [":sigbot_lib"],
+)
+
+py_binary(
+    name = "admin",
+    srcs = ["admin_cli.py"],
+    main = "admin_cli.py",
+    deps = [":sigbot_lib"],
+)

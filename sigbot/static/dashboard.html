@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sigbot · dashboard</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { background:#101418; color:#d7dde3; font:14px/1.5 system-ui, sans-serif;
+         margin:0; padding:1.5rem; max-width:960px; margin-inline:auto; }
+  header { display:flex; justify-content:space-between; align-items:baseline;
+           margin-bottom:1.2rem; }
+  h1 { font-size:1.15rem; margin:0; } h1 span { color:#5eb0ef; }
+  h2 { font-size:1rem; margin:1.6rem 0 .6rem; color:#9fb0c0; }
+  .card { background:#171d24; border:1px solid #26303a; border-radius:10px;
+          padding:1rem 1.2rem; margin-bottom:.9rem; }
+  .card h3 { margin:0; font-size:1rem; }
+  .muted { color:#7d8b99; font-size:.85rem; }
+  .row { display:flex; gap:.6rem; align-items:center; flex-wrap:wrap; }
+  .spread { justify-content:space-between; }
+  .tag { background:#20303f; color:#8fc7f2; border-radius:99px; padding:.05rem .6rem;
+         font-size:.78rem; white-space:nowrap; }
+  .tag.off { background:#3a2426; color:#f2a08f; }
+  button { background:#232d38; border:1px solid #33404d; border-radius:6px;
+           color:#cfe1f0; padding:.32rem .75rem; font:inherit; font-size:.85rem;
+           cursor:pointer; }
+  button:hover { border-color:#5eb0ef; }
+  button.primary { background:#1f6feb; border-color:transparent; color:#fff; font-weight:600; }
+  button.danger:hover { border-color:#f47067; color:#f47067; }
+  input, select, textarea { background:#0d1116; border:1px solid #2c3844;
+    border-radius:6px; color:inherit; padding:.45rem .6rem; font:inherit; width:100%; }
+  textarea { min-height:7rem; font-family:ui-monospace, monospace; font-size:.85rem; }
+  label { display:grid; gap:.25rem; font-size:.82rem; color:#9fb0c0; }
+  form.grid { display:grid; gap:.7rem; margin-top:.8rem; }
+  .cols { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:.7rem; }
+  table { width:100%; border-collapse:collapse; font-size:.85rem; margin-top:.5rem; }
+  th, td { text-align:left; padding:.3rem .5rem; border-bottom:1px solid #222c36; }
+  th { color:#7d8b99; font-weight:500; }
+  .keyreveal { background:#0d1116; border:1px dashed #3fb950; border-radius:6px;
+    padding:.7rem; font-family:ui-monospace, monospace; word-break:break-all;
+    margin-top:.6rem; }
+  .keyreveal small { display:block; color:#7d8b99; font-family:system-ui; margin-top:.3rem; }
+  .msgs { max-height:280px; overflow:auto; background:#0d1116; border-radius:6px;
+    padding:.6rem .8rem; margin-top:.6rem; font-size:.85rem; }
+  .msgs div { margin:.15rem 0; }
+  .msgs .out { color:#8fc7f2; }
+  #toast { position:fixed; bottom:1rem; right:1rem; background:#3a2426; color:#f2a08f;
+    border-radius:8px; padding:.6rem 1rem; display:none; }
+  details > summary { cursor:pointer; color:#9fb0c0; font-size:.85rem; margin-top:.6rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1><span>◆</span> sigbot dashboard</h1>
+  <div class="row">
+    <button onclick="load()">Refresh</button>
+    <button onclick="logout()">Log out</button>
+  </div>
+</header>
+
+<h2>Services</h2>
+<div id="services"></div>
+
+<h2>Register a new service</h2>
+<div class="card">
+  <form class="grid" id="newService">
+    <div class="cols">
+      <label>Group chat
+        <select name="group_id" id="groupSel" required></select>
+      </label>
+      <label>Service name (slug)
+        <input name="name" placeholder="ops-alerts" pattern="[a-z0-9][a-z0-9-_]*" required>
+      </label>
+      <label>Persona label
+        <input name="label" placeholder="Opsy" required>
+      </label>
+    </div>
+    <label>System prompt (the persona)
+      <textarea name="system_prompt" placeholder="You are Opsy, the on-call sidekick…" required></textarea>
+    </label>
+    <div class="cols">
+      <label>Responds to
+        <select name="respond_to">
+          <option value="all">every message</option>
+          <option value="mention">only when mentioned</option>
+        </select>
+      </label>
+      <label>Model override (optional)
+        <input name="model" placeholder="(default)">
+      </label>
+      <label style="align-self:end" class="row">
+        <span class="row" style="gap:.4rem">
+          <input type="checkbox" name="prefix_label" checked style="width:auto">
+          prefix messages with [label]
+        </span>
+      </label>
+    </div>
+    <div><button class="primary">Create service</button></div>
+  </form>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const $ = (s, el=document) => el.querySelector(s);
+let state = { services: [], groups: [] };
+const reveals = {};  // service id -> one-time key reveal HTML, survives re-renders
+
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 4000);
+}
+
+async function api(method, url, body) {
+  const r = await fetch(url, {
+    method, headers: body ? {'Content-Type': 'application/json'} : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (r.status === 401 && !url.startsWith('/admin/api/groups')) { location.href = '/login'; return null; }
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) { toast(data.error || `${method} ${url} failed (${r.status})`); return null; }
+  return data;
+}
+
+async function load() {
+  const [svc, grp] = await Promise.all([
+    api('GET', '/admin/api/services'),
+    api('GET', '/admin/api/groups'),
+  ]);
+  if (svc) state.services = svc.services;
+  state.groups = grp ? grp.groups : [];
+  renderGroups(); renderServices();
+}
+
+function renderGroups() {
+  const bound = new Set(state.services.map(s => s.group_id));
+  const sel = $('#groupSel');
+  sel.innerHTML = state.groups.length
+    ? state.groups.map(g =>
+        `<option value="${esc(g.internal_id)}" ${bound.has(g.internal_id) ? 'disabled' : ''}>
+           ${esc(g.name || g.internal_id)} (${g.members} members)${bound.has(g.internal_id) ? ' — bound' : ''}
+         </option>`).join('')
+    : '<option value="">(signal API unreachable — no groups)</option>';
+}
+
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function renderServices() {
+  const root = $('#services');
+  if (!state.services.length) {
+    root.innerHTML = '<p class="muted">No services yet — register one below. ' +
+      'Add the bot account to a Signal group first, then it appears in the group list.</p>';
+    return;
+  }
+  root.innerHTML = state.services.map(s => `
+  <div class="card" data-id="${s.id}">
+    <div class="row spread">
+      <div class="row">
+        <h3>${esc(s.name)}</h3>
+        <span class="tag">${esc(s.label)}</span>
+        <span class="tag">${esc(s.group_name || s.group_id)}</span>
+        <span class="tag">${s.respond_to === 'all' ? 'replies to all' : 'mention-only'}</span>
+        ${s.model ? `<span class="tag">${esc(s.model)}</span>` : ''}
+        ${s.enabled ? '' : '<span class="tag off">disabled</span>'}
+      </div>
+      <div class="row">
+        <button onclick="toggleEnabled(${s.id}, ${s.enabled})">${s.enabled ? 'Disable' : 'Enable'}</button>
+        <button class="danger" onclick="delService(${s.id}, '${esc(s.name)}')">Delete</button>
+      </div>
+    </div>
+    <details><summary>Persona</summary>
+      <form class="grid" onsubmit="return saveService(event, ${s.id})">
+        <div class="cols">
+          <label>Persona label <input name="label" value="${esc(s.label)}" required></label>
+          <label>Responds to
+            <select name="respond_to">
+              <option value="all" ${s.respond_to==='all'?'selected':''}>every message</option>
+              <option value="mention" ${s.respond_to==='mention'?'selected':''}>only when mentioned</option>
+            </select>
+          </label>
+          <label>Model override <input name="model" value="${esc(s.model || '')}" placeholder="(default)"></label>
+        </div>
+        <label>System prompt <textarea name="system_prompt" required>${esc(s.system_prompt)}</textarea></label>
+        <label class="row"><span class="row" style="gap:.4rem">
+          <input type="checkbox" name="prefix_label" ${s.prefix_label?'checked':''} style="width:auto">
+          prefix messages with [label]</span></label>
+        <div><button class="primary">Save persona</button></div>
+      </form>
+    </details>
+    <details ${reveals[s.id] ? 'open' : ''}><summary>API keys (${s.api_keys.filter(k => !k.revoked_at).length} active)</summary>
+      <table><tr><th>id</th><th>label</th><th>created</th><th>last used</th><th></th></tr>
+        ${s.api_keys.map(k => `<tr>
+          <td>${k.id}</td><td>${esc(k.label || '—')}</td>
+          <td>${esc(k.created_at)}</td><td>${esc(k.last_used_at || 'never')}</td>
+          <td>${k.revoked_at ? '<span class="muted">revoked</span>'
+                : `<button class="danger" onclick="revokeKey(${k.id})">Revoke</button>`}</td>
+        </tr>`).join('') || '<tr><td colspan="5" class="muted">no keys yet</td></tr>'}
+      </table>
+      <div class="row" style="margin-top:.6rem">
+        <input id="keylabel-${s.id}" placeholder="key label (what's it for?)" style="max-width:260px">
+        <button class="primary" onclick="mintKey(${s.id})">Mint key</button>
+      </div>
+      <div id="reveal-${s.id}">${reveals[s.id] || ''}</div>
+    </details>
+    <details ontoggle="if(this.open) showMessages(${s.id})"><summary>Recent messages</summary>
+      <div class="msgs" id="msgs-${s.id}"></div>
+    </details>
+  </div>`).join('');
+}
+
+async function saveService(e, id) {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const body = {
+    label: fd.get('label'), system_prompt: fd.get('system_prompt'),
+    respond_to: fd.get('respond_to'), model: fd.get('model'),
+    prefix_label: fd.get('prefix_label') === 'on',
+  };
+  if (await api('PATCH', `/admin/api/services/${id}`, body)) { toast('saved'); load(); }
+  return false;
+}
+
+async function toggleEnabled(id, enabled) {
+  if (await api('PATCH', `/admin/api/services/${id}`, {enabled: !enabled})) load();
+}
+
+async function delService(id, name) {
+  if (!confirm(`Delete service "${name}"? Its API keys and message log go with it.`)) return;
+  if (await api('DELETE', `/admin/api/services/${id}`)) load();
+}
+
+async function mintKey(id) {
+  const label = $(`#keylabel-${id}`).value;
+  const data = await api('POST', `/admin/api/services/${id}/keys`, {label});
+  if (!data) return;
+  reveals[id] = `<div class="keyreveal">${esc(data.key)}
+    <small>Copy it now — this key is shown once and only a hash is stored.</small></div>`;
+  load();
+}
+
+async function revokeKey(keyId) {
+  if (await api('DELETE', `/admin/api/keys/${keyId}`)) load();
+}
+
+async function showMessages(id) {
+  const data = await api('GET', `/admin/api/services/${id}/messages?limit=100`);
+  if (!data) return;
+  $(`#msgs-${id}`).innerHTML = data.messages.map(m => m.direction === 'in'
+    ? `<div><b>${esc(m.sender_name || m.sender)}:</b> ${esc(m.text)}${m.has_attachments ? ' 📎' : ''}</div>`
+    : `<div class="out"><b>bot (${esc(m.via)}):</b> ${esc(m.text)}</div>`
+  ).join('') || '<span class="muted">no messages yet</span>';
+}
+
+async function logout() { await api('POST', '/auth/logout'); location.href = '/login'; }
+
+document.getElementById('newService').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const body = Object.fromEntries(['group_id','name','label','system_prompt','respond_to','model']
+    .map(k => [k, fd.get(k)]));
+  body.prefix_label = fd.get('prefix_label') === 'on';
+  if (await api('POST', '/admin/api/services', body)) { e.target.reset(); toast('service created'); load(); }
+});
+
+load();
+</script>
+</body>
+</html>

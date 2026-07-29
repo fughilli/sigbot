@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sigbot · login</title>
+<style>
+  :root { color-scheme: dark; }
+  body { background:#101418; color:#d7dde3; font:15px/1.5 system-ui, sans-serif;
+         display:grid; place-items:center; min-height:100vh; margin:0; }
+  form { background:#171d24; border:1px solid #26303a; border-radius:10px;
+         padding:2rem; width:min(320px, 90vw); display:grid; gap:.8rem; }
+  h1 { font-size:1.1rem; margin:0 0 .5rem; font-weight:600; }
+  h1 span { color:#5eb0ef; }
+  input { background:#0d1116; border:1px solid #2c3844; border-radius:6px;
+          color:inherit; padding:.55rem .7rem; font:inherit; }
+  input:focus { outline:none; border-color:#5eb0ef; }
+  button { background:#1f6feb; border:none; border-radius:6px; color:#fff;
+           padding:.6rem; font:inherit; font-weight:600; cursor:pointer; }
+  button:hover { background:#2a7bf6; }
+  #err { color:#f47067; min-height:1.2em; font-size:.85rem; margin:0; }
+</style>
+</head>
+<body>
+<form id="f">
+  <h1><span>◆</span> sigbot dashboard</h1>
+  <input name="username" placeholder="username" autocomplete="username" autofocus required>
+  <input name="password" type="password" placeholder="password" autocomplete="current-password" required>
+  <p id="err"></p>
+  <button>Sign in</button>
+</form>
+<script>
+document.getElementById('f').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const r = await fetch('/auth/login', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({username: fd.get('username'), password: fd.get('password')}),
+  });
+  if (r.ok) location.href = '/';
+  else document.getElementById('err').textContent =
+    (await r.json().catch(() => ({}))).error || 'login failed';
+});
+</script>
+</body>
+</html>

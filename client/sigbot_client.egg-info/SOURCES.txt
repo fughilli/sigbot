@@ -1,0 +1,7 @@
+README.md
+pyproject.toml
+sigbot_client/__init__.py
+sigbot_client.egg-info/PKG-INFO
+sigbot_client.egg-info/SOURCES.txt
+sigbot_client.egg-info/dependency_links.txt
+sigbot_client.egg-info/top_level.txt

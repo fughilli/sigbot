@@ -1,0 +1,13 @@
+# sigbot static infra config. Copy to sigbot.yaml (gitignored) and fill in.
+# Services (group personas), API keys, and dashboard admins are all registered
+# at runtime through the dashboard (or `bazel run //sigbot:admin`), not here.
+signal:
+  api_url: http://localhost:8080
+  bot_number: "+1__BOT_NUMBER__"
+bot_name: Botsy                  # the account's Signal profile display name
+db_path: data/sigbot.db
+anthropic_api_key_env: ANTHROPIC_API_KEY
+default_model: claude-sonnet-4-6 # per-service override in the dashboard
+api:
+  host: 0.0.0.0                  # published ports reach the container eth0, not loopback
+  port: 8100                     # service API + admin dashboard

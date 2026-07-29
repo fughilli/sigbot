@@ -9,8 +9,12 @@ __pycache__/
 *.pyc
 .venv/
 
+# Built wheels
+dist/
+
 # Runtime state (never committed)
 config.yaml
+sigbot.yaml
 cache/
 data/
 references/
@@ -24,3 +28,6 @@ credentials/
 result
 .deps/
 .playwright-browsers
+
+# Claude Code local settings
+.claude/settings.local.json
