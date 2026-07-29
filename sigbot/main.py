@@ -21,12 +21,25 @@ log = logging.getLogger(__name__)
 
 
 def bootstrap_admin(store: Store) -> None:
-    """First run: create the dashboard admin. Password comes from
-    $SIGBOT_ADMIN_PASSWORD, else is generated and printed ONCE — reset later
-    with `bazel run //sigbot:admin -- set-password <user>`."""
+    """First run: create the dashboard admin. Precedence:
+    $SIGBOT_ADMIN_PASSWORD_HASH (a pbkdf2 string from `//sigbot:admin
+    hash-password` — preferred, so deployments never persist a plaintext
+    password), else $SIGBOT_ADMIN_PASSWORD (hashed here, convenient for dev),
+    else a password is generated and printed ONCE. Reset later with
+    `bazel run //sigbot:admin -- set-password <user>`."""
     if store.count_admins():
         return
     username = os.environ.get("SIGBOT_ADMIN_USER", "admin")
+    pw_hash = os.environ.get("SIGBOT_ADMIN_PASSWORD_HASH")
+    if pw_hash:
+        if not pw_hash.startswith("pbkdf2$"):
+            raise SystemExit(
+                "SIGBOT_ADMIN_PASSWORD_HASH is not a pbkdf2 hash — generate one "
+                "with `//sigbot:admin hash-password` (in the container: "
+                "/sigbot/admin hash-password)")
+        store.upsert_admin(username, pw_hash)
+        log.info("dashboard admin %r created from password hash", username)
+        return
     password = os.environ.get("SIGBOT_ADMIN_PASSWORD")
     generated = password is None
     if generated:

@@ -43,6 +43,12 @@ def main() -> None:
     p.add_argument("username")
     sub.add_parser("list-admins")
 
+    sub.add_parser(
+        "hash-password",
+        help="print the PBKDF2 hash of $SIGBOT_ADMIN_PASSWORD (or prompted) — "
+             "for SIGBOT_ADMIN_PASSWORD_HASH in a deployment .env; needs no config/db",
+    )
+
     sub.add_parser("list-services")
     p = sub.add_parser("mint-key", help="mint an API key for a service")
     p.add_argument("service", help="service name")
@@ -51,6 +57,9 @@ def main() -> None:
     p.add_argument("key_id", type=int)
 
     args = parser.parse_args()
+    if args.command == "hash-password":  # pure function of the password: no config/db
+        print(auth.hash_password(_password()))
+        return
     workdir = os.environ.get("BUILD_WORKING_DIRECTORY")
     if workdir:
         os.chdir(workdir)

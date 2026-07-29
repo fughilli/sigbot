@@ -85,7 +85,8 @@ docker compose up -d                      #   OR: nix build .#signal-services -o
 bazel run //scripts:setup_signal          # bot-account registration, first time only
 cp sigbot.example.yaml sigbot.yaml        # fill in the bot number
 export ANTHROPIC_API_KEY=...
-export SIGBOT_ADMIN_PASSWORD=...          # else one is generated + printed once
+export SIGBOT_ADMIN_PASSWORD=...          # or _PASSWORD_HASH (see `admin hash-password`);
+                                          # else one is generated + printed once
 bazel run //sigbot:sigbot_server -- --workdir "$PWD"
 ```
 

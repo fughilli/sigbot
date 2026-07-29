@@ -21,6 +21,11 @@ fail() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
 command -v docker >/dev/null || fail "docker is required (https://docs.docker.com/engine/install/)"
 
+# Pull first: the image's admin CLI is also the password-hashing tool used
+# during commissioning below.
+say "pulling $SIGBOT_IMAGE"
+docker pull "$SIGBOT_IMAGE"
+
 mkdir -p "$SIGBOT_HOME/signal-cli"
 cd "$SIGBOT_HOME"
 
@@ -73,18 +78,26 @@ EOF
       ADMIN_PASS="$(head -c 12 /dev/urandom | base64 | tr -d '/+=' )"
       GENERATED=1
     fi
+    # Only the PBKDF2 hash is persisted; the image's admin CLI computes it.
+    ADMIN_HASH="$(docker run --rm -e SIGBOT_ADMIN_PASSWORD="$ADMIN_PASS" \
+      --entrypoint /sigbot/admin "$SIGBOT_IMAGE" hash-password)" \
+      || fail "could not hash the password with $SIGBOT_IMAGE"
     cat > .env <<EOF
-# sigbot secrets (chmod 600; never commit). Reset the admin password with:
+# sigbot secrets (chmod 600; never commit). The admin password is stored as
+# a PBKDF2 hash only; reset it with:
 #   docker exec <container> /sigbot/admin --config /data/sigbot.yaml set-password $ADMIN_USER
 # SIGBOT_ADMIN_* only matter on first boot with an empty DB; an existing
 # sigbot.db keeps its admins regardless.
 ANTHROPIC_API_KEY=$ANTHROPIC_KEY
 SIGBOT_ADMIN_USER=$ADMIN_USER
-SIGBOT_ADMIN_PASSWORD=$ADMIN_PASS
+SIGBOT_ADMIN_PASSWORD_HASH=$ADMIN_HASH
 EOF
     chmod 600 .env
-    say "wrote .env (secrets, mode 600)"
-    [[ -n "${GENERATED:-}" ]] && say "generated dashboard password for '$ADMIN_USER': $ADMIN_PASS (stored in .env)"
+    say "wrote .env (secrets, mode 600; admin password stored hashed)"
+    if [[ -n "${GENERATED:-}" ]]; then
+      say "generated dashboard password for '$ADMIN_USER': $ADMIN_PASS"
+      say "SAVE IT NOW — only its hash is stored; it cannot be recovered"
+    fi
   fi
 fi
 
@@ -108,9 +121,6 @@ case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
   *) say "NOTE: $BIN_DIR is not on your PATH — add it, or call $BIN_DIR/sigbot-d directly" ;;
 esac
-
-say "pulling $SIGBOT_IMAGE"
-docker pull "$SIGBOT_IMAGE"
 
 cat <<EOF
 

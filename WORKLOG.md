@@ -79,6 +79,9 @@ github.com/fughilli/marketplace-finder-bot (checked out, gitignored, at
   unless-stopped, container name derived from the dir so instances coexist);
   also stop|logs|status. Prints provisioning options (REST register vs
   qrcodelink). Idempotent; prompts via /dev/tty so `curl | bash` works.
+  .env stores SIGBOT_ADMIN_PASSWORD_HASH (pbkdf2, computed by the image's
+  /sigbot/admin hash-password), never the plaintext; bootstrap precedence
+  in main.py is _HASH > plaintext env (dev) > generated.
 
 ## Next up
 1. Verify the live round trip: user messages the 🛋 group; finder should
