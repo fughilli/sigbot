@@ -10,5 +10,9 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
 
+[project.urls]
+Homepage = "https://github.com/fughilli/sigbot"
+Source = "https://github.com/fughilli/sigbot"
+
 [tool.setuptools.packages.find]
 include = ["sigbot_client*"]

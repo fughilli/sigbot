@@ -13,10 +13,19 @@ py_library(
 
 # The installable artifact:  bazel build //client:sigbot_client_wheel
 # (scripts/build_client_wheel.sh remains as the pip-based alternative).
-# Keep version in sync with pyproject.toml and sigbot_client.__version__.
+# THIS is what CI publishes to PyPI/releases; pyproject.toml only drives the
+# pip-based path. scripts/check_client_version.py enforces that the version
+# and the shared metadata fields below stay in sync between the two.
 py_wheel(
     name = "sigbot_client_wheel",
+    description_content_type = "text/markdown",
+    description_file = "README.md",
     distribution = "sigbot-client",
+    license = "MIT",
+    project_urls = {
+        "Homepage": "https://github.com/fughilli/sigbot",
+        "Source": "https://github.com/fughilli/sigbot",
+    },
     python_requires = ">=3.9",
     python_tag = "py3",
     strip_path_prefixes = ["client"],

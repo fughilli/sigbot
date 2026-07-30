@@ -1,6 +1,7 @@
 # sigbot-client
 
-Zero-dependency Python client for the [sigbot](../sigbot) service API. Each
+Zero-dependency Python client for the
+[sigbot](https://github.com/fughilli/sigbot) service API. Each
 sigbot *service* is one Signal group chat with its own persona; an API key
 (minted in the sigbot dashboard) scopes this client to that group.
 
