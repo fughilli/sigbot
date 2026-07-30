@@ -31,21 +31,35 @@ def parse(version: str, source: str) -> tuple[int, int, int]:
     return tuple(int(g) for g in m.groups())  # type: ignore[return-value]
 
 
+def build_attr(build: str, attr: str) -> str:
+    m = re.search(rf'{attr} = "([^"]*)"', build)
+    if not m:
+        fail(f"no py_wheel {attr} found in client/BUILD.bazel")
+    return m.group(1)  # type: ignore[union-attr]
+
+
 def main() -> None:
     root = pathlib.Path(__file__).resolve().parent.parent
 
-    pyproject = tomllib.loads((root / "client" / "pyproject.toml").read_text())
-    py_version = pyproject["project"]["version"]
-
+    project = tomllib.loads((root / "client" / "pyproject.toml").read_text())["project"]
+    py_version = project["version"]
     build = (root / "client" / "BUILD.bazel").read_text()
-    m = re.search(r'version = "(\d+\.\d+\.\d+)"', build)
-    if not m:
-        fail("no py_wheel version found in client/BUILD.bazel")
-    build_version = m.group(1)
 
-    if py_version != build_version:
-        fail(f"client/pyproject.toml says {py_version} but client/BUILD.bazel "
-             f"py_wheel says {build_version} — bump both together")
+    # The bazel py_wheel is what CI publishes; pyproject drives pip builds.
+    # Every field they both define must agree.
+    for label, expected, attr in [
+        ("version", py_version, "version"),
+        ("description/summary", project["description"], "summary"),
+        ("requires-python", project["requires-python"], "python_requires"),
+        ("license", project["license"]["text"], "license"),
+        ("Homepage url", project["urls"]["Homepage"], None),
+    ]:
+        actual = (build_attr(build, attr) if attr
+                  else (re.search(r'"Homepage": "([^"]*)"', build) or fail(
+                      "no Homepage in py_wheel project_urls")).group(1))
+        if actual != expected:
+            fail(f"{label} mismatch: pyproject.toml says {expected!r}, "
+                 f"BUILD.bazel py_wheel says {actual!r} — keep them in sync")
     version = parse(py_version, "client/pyproject.toml")
 
     tags = subprocess.run(["git", "tag", "-l", "v*"], cwd=root, check=True,
