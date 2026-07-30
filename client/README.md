@@ -7,14 +7,13 @@ sigbot *service* is one Signal group chat with its own persona; an API key
 
 ## Install
 
-Build the wheel from the repo and install it on the host or in any container:
-
 ```sh
-pip wheel --no-deps ./client -w dist/
-pip install dist/sigbot_client-*.whl
+pip install sigbot-client
 ```
 
-(Or `pip install ./client` straight from the source tree.)
+(Or grab the wheel from the GitHub releases page, or build it from the repo
+with `bazel build //client:sigbot_client_wheel` — the py_wheel target in
+BUILD.bazel is the package's single source of metadata.)
 
 ## Use
 

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """CI guard: the client version is consistent and never runs ahead of releases.
 
-- client/pyproject.toml and the py_wheel version in client/BUILD.bazel agree.
+- The py_wheel version in client/BUILD.bazel (the single source of package
+  metadata — this is what CI publishes) must match sigbot_client.__version__.
 - On a tag build (GITHUB_REF_TYPE=tag) the version must EQUAL the tag, so the
   wheel published to PyPI/the release page is the version the tag claims.
 - On any other build the version must be <= the latest v* tag: a version
@@ -17,7 +18,6 @@ import pathlib
 import re
 import subprocess
 import sys
-import tomllib
 
 
 def fail(msg: str) -> None:
@@ -31,36 +31,25 @@ def parse(version: str, source: str) -> tuple[int, int, int]:
     return tuple(int(g) for g in m.groups())  # type: ignore[return-value]
 
 
-def build_attr(build: str, attr: str) -> str:
-    m = re.search(rf'{attr} = "([^"]*)"', build)
-    if not m:
-        fail(f"no py_wheel {attr} found in client/BUILD.bazel")
-    return m.group(1)  # type: ignore[union-attr]
-
-
 def main() -> None:
     root = pathlib.Path(__file__).resolve().parent.parent
 
-    project = tomllib.loads((root / "client" / "pyproject.toml").read_text())["project"]
-    py_version = project["version"]
     build = (root / "client" / "BUILD.bazel").read_text()
+    m = re.search(r'version = "(\d+\.\d+\.\d+)"', build)
+    if not m:
+        fail("no py_wheel version found in client/BUILD.bazel")
+    wheel_version = m.group(1)
 
-    # The bazel py_wheel is what CI publishes; pyproject drives pip builds.
-    # Every field they both define must agree.
-    for label, expected, attr in [
-        ("version", py_version, "version"),
-        ("description/summary", project["description"], "summary"),
-        ("requires-python", project["requires-python"], "python_requires"),
-        ("license", project["license"]["text"], "license"),
-        ("Homepage url", project["urls"]["Homepage"], None),
-    ]:
-        actual = (build_attr(build, attr) if attr
-                  else (re.search(r'"Homepage": "([^"]*)"', build) or fail(
-                      "no Homepage in py_wheel project_urls")).group(1))
-        if actual != expected:
-            fail(f"{label} mismatch: pyproject.toml says {expected!r}, "
-                 f"BUILD.bazel py_wheel says {actual!r} — keep them in sync")
-    version = parse(py_version, "client/pyproject.toml")
+    init = (root / "client" / "sigbot_client" / "__init__.py").read_text()
+    m = re.search(r'__version__ = "([^"]+)"', init)
+    if not m:
+        fail("no __version__ found in client/sigbot_client/__init__.py")
+    module_version = m.group(1)
+
+    if wheel_version != module_version:
+        fail(f"py_wheel in client/BUILD.bazel says {wheel_version} but "
+             f"sigbot_client.__version__ says {module_version} — bump both together")
+    version = parse(wheel_version, "client/BUILD.bazel")
 
     tags = subprocess.run(["git", "tag", "-l", "v*"], cwd=root, check=True,
                           capture_output=True, text=True).stdout.split()
@@ -72,20 +61,20 @@ def main() -> None:
         if not re.fullmatch(r"v\d+\.\d+\.\d+", tag):
             fail(f"release tag {tag!r} is not vX.Y.Z")
         if parse(tag[1:], f"tag {tag}") != version:
-            fail(f"release tag {tag} does not match client version {py_version} "
-                 f"— retag after bumping client/pyproject.toml + client/BUILD.bazel")
-        print(f"ok: releasing sigbot-client {py_version} from tag {tag}")
+            fail(f"release tag {tag} does not match client version {wheel_version} "
+                 f"— retag after bumping client/BUILD.bazel + sigbot_client.__version__")
+        print(f"ok: releasing sigbot-client {wheel_version} from tag {tag}")
         return
 
     if not releases:
-        print(f"ok: client version {py_version}, no v* release tags yet")
+        print(f"ok: client version {wheel_version}, no v* release tags yet")
         return
     latest = max(releases)
     if version > latest:
-        fail(f"client version {py_version} is ahead of the latest release tag "
-             f"v{'.'.join(map(str, latest))} — tag v{py_version} to release it "
+        fail(f"client version {wheel_version} is ahead of the latest release tag "
+             f"v{'.'.join(map(str, latest))} — tag v{wheel_version} to release it "
              f"(or revert the bump)")
-    print(f"ok: client version {py_version} <= latest release tag "
+    print(f"ok: client version {wheel_version} <= latest release tag "
           f"v{'.'.join(map(str, latest))}")
 
 
