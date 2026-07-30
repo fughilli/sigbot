@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sigbot-client"
-version = "0.2.0"
+version = "0.2.5"
 description = "Client for the sigbot per-group-chat service API (stdlib-only)"
 readme = "README.md"
 requires-python = ">=3.9"
