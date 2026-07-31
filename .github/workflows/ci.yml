@@ -103,19 +103,21 @@ jobs:
           key: bazel-test-${{ hashFiles('.bazelversion', 'MODULE.bazel', 'requirements.lock') }}
           restore-keys: bazel-test-
       - run: bazel build //client:sigbot_client_wheel
-      - run: cp bazel-bin/client/sigbot_client-*.whl .
+      # A clean dir: the publish action validates EVERY file in packages-dir,
+      # so it must contain nothing but distributions.
+      - run: mkdir -p dist && cp bazel-bin/client/sigbot_client-*.whl dist/
       - uses: actions/upload-artifact@v4
         with:
           name: sigbot-client-wheel
-          path: sigbot_client-*.whl
+          path: dist/sigbot_client-*.whl
       - name: attach wheel to release
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
-          files: sigbot_client-*.whl
+          files: dist/sigbot_client-*.whl
           generate_release_notes: true
       - name: publish to PyPI
         if: github.ref_type == 'tag'
         uses: pypa/gh-action-pypi-publish@v1.12.4
         with:
-          packages-dir: .
+          packages-dir: dist
