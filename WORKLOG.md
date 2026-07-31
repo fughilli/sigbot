@@ -65,8 +65,10 @@ github.com/fughilli/marketplace-finder-bot (checked out, gitignored, at
   //sigbot:image_load for local docker; //sigbot:image_push →
   ghcr.io/fughilli/sigbot. Verified by layer inspection + running extracted
   binaries (docker can't run in this container).
-- //client:sigbot_client_wheel — bazel-built wheel (version duplicated in
-  client/BUILD.bazel + pyproject.toml — bump both).
+- //client:sigbot_client_wheel — the ONLY wheel build (pyproject.toml and
+  the pip-based build script were removed once py_wheel carried full
+  metadata); version duplicated in client/BUILD.bazel +
+  sigbot_client.__version__ — bump both, CI's version-check enforces it.
 - .github/workflows/ci.yml: test → per-arch image jobs (ubuntu-24.04 +
   ubuntu-24.04-arm, native builds, push latest-{arch} + sha-{arch} tags on
   master/tags) → manifest job stitches :latest/:sha/:vX with buildx

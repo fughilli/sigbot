@@ -22,7 +22,7 @@ import urllib.parse
 import urllib.request
 
 __all__ = ["ServiceClient", "SigbotApiError"]
-__version__ = "0.2.0"
+__version__ = "0.2.5"
 
 
 class SigbotApiError(Exception):

@@ -131,10 +131,10 @@ list-services|mint-key|revoke-key` (run with the workdir as cwd).
 
 External bots consume the service API two ways:
 
-- **pip**: grab `sigbot_client-*.whl` from the GitHub releases page (CI
-  attaches it on version tags), or build it yourself:
-  `bazel build //client:sigbot_client_wheel` (or, without bazel,
-  `scripts/build_client_wheel.sh`). See [client/README.md](client/README.md).
+- **pip**: `pip install sigbot-client` (published on version tags; the same
+  wheel is attached to the GitHub release), or build it yourself with
+  `bazel build //client:sigbot_client_wheel`. See
+  [client/README.md](client/README.md).
 - **bazel module**: depend on this repo and use
   `@sigbot//client:sigbot_client_lib`:
 

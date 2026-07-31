@@ -14,9 +14,10 @@ env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/sigbot
 
 jobs:
-  # The client version must match between pyproject/BUILD, never run ahead of
-  # the latest release tag, and equal the tag on release builds (gates the
-  # PyPI publish in the wheel job).
+  # Wheel/image/tag coherence: py_wheel version == __version__; on branches
+  # it may run ahead of the latest tag (a pending release) but never behind;
+  # on tag builds it must equal the tag and be unpublished on PyPI (gates
+  # the PyPI publish in the wheel job).
   version-check:
     runs-on: ubuntu-24.04
     steps:
