@@ -29,7 +29,17 @@ bot.send("raw text", prefix=False)  # suppress the [label] prefix for this messa
 # Read the group's message log; poll incrementally with after_id:
 msgs = bot.messages(limit=50)
 newer = bot.messages(after_id=msgs[-1]["id"]) if msgs else []
+
+# React to a message — acknowledge without adding to the transcript:
+bot.react(msgs[-1]["id"], "👀")     # seen it
+bot.react(msgs[-1]["id"], "✅")     # ...and done
+bot.unreact(msgs[-1]["id"], "👀")   # retract
 ```
+
+Only *incoming* messages can be reacted to. Signal addresses a reaction by the
+target's author and timestamp, which sigbot records for messages it receives but
+not for ones it sends, so reacting to the bot's own message raises
+`SigbotApiError` with `.status == 409`.
 
 Errors surface as `SigbotApiError` with `.status` and `.message` (e.g. 401 for
 a revoked key).

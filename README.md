@@ -116,9 +116,17 @@ The server binds one port (default 8100) carrying both surfaces:
 - **Service API** (`/api/v1/*`, `Authorization: Bearer sb_...`): each key is
   scoped to its service's group — read the message log
   (`GET /api/v1/messages`, incremental via `after_id`), post into the group
-  as the bot (`POST /api/v1/messages`, optional `attachments_b64`), download
-  incoming attachments (`GET /api/v1/attachments/{id}`), inspect the persona
-  (`GET /api/v1/service`).
+  as the bot (`POST /api/v1/messages`, optional `attachments_b64`), react to an
+  incoming message (`POST`/`DELETE /api/v1/messages/{id}/reactions`, body
+  `{"emoji": "👀"}`), download incoming attachments
+  (`GET /api/v1/attachments/{id}`), inspect the persona (`GET /api/v1/service`).
+
+  Reactions let a bot acknowledge without adding to the transcript — mark a
+  message 👀 on receipt and ✅ when the work is done, instead of posting two more
+  messages into the group. Only *incoming* messages are reactable: Signal
+  addresses a reaction by the target's author and timestamp, which sigbot records
+  on receive but has no equivalent for its own sends (those return `409`, as do
+  messages received before sigbot started recording timestamps).
 
 Personas answer in their group using the service's system prompt, with the
 group's message history (including messages injected through the API) as

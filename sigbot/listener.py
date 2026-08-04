@@ -28,6 +28,7 @@ class Incoming:
     text: str
     attachments: list[dict]  # signal attachment descriptors (id, contentType, …)
     mentioned: bool          # bot was @-mentioned or named in the text
+    signal_ts: int | None = None  # Signal's timestamp; the target id for a reaction
 
 
 def parse_envelope(envelope: dict, bot_number: str, bot_name: str,
@@ -55,6 +56,10 @@ def parse_envelope(envelope: dict, bot_number: str, bot_name: str,
         text=text,
         attachments=attachments,
         mentioned=_is_mentioned(data, text, bot_number, bot_name, service["label"]),
+        # dataMessage.timestamp is the message's own id in Signal; the envelope
+        # timestamp matches it for a normal send but is the delivery time for
+        # sync/edit envelopes, so prefer the dataMessage one.
+        signal_ts=data.get("timestamp") or envelope.get("timestamp"),
     )
 
 

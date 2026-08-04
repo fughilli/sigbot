@@ -22,7 +22,7 @@ import urllib.parse
 import urllib.request
 
 __all__ = ["ServiceClient", "SigbotApiError"]
-__version__ = "0.2.5"
+__version__ = "0.3.0"
 
 
 class SigbotApiError(Exception):
@@ -71,6 +71,22 @@ class ServiceClient:
             params["after_id"] = after_id
         query = urllib.parse.urlencode(params)
         return self._request("GET", f"/api/v1/messages?{query}")["messages"]
+
+    def react(self, message_id: int, emoji: str) -> dict:
+        """React to a message in the group — how a bot acknowledges without
+        adding to the transcript (e.g. 👀 on receipt, ✅ when done).
+
+        Only incoming messages can be reacted to: Signal addresses a reaction by
+        the target's author and timestamp, which sigbot records for messages it
+        receives but not for ones it sends.
+        """
+        return self._request(
+            "POST", f"/api/v1/messages/{int(message_id)}/reactions", {"emoji": emoji})
+
+    def unreact(self, message_id: int, emoji: str) -> dict:
+        """Retract a reaction previously sent with the same emoji."""
+        return self._request(
+            "DELETE", f"/api/v1/messages/{int(message_id)}/reactions", {"emoji": emoji})
 
     def fetch_attachment(self, attachment_id: str) -> bytes:
         """Download an attachment referenced by a message's 'attachments'

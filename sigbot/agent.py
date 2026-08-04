@@ -92,6 +92,7 @@ class PersonaAgent:
             sender=inc.sender, sender_name=inc.sender_name,
             attachments=[{"id": a.get("id"), "contentType": a.get("contentType")}
                          for a in inc.attachments if a.get("id")],
+            signal_ts=inc.signal_ts,
         )
         if not should_respond(inc):
             return

@@ -66,6 +66,11 @@ CREATE TABLE IF NOT EXISTS messages (
     text        TEXT NOT NULL,
     has_attachments INTEGER NOT NULL DEFAULT 0,
     attachments TEXT,                -- JSON list of signal descriptors (id, contentType)
+    -- Signal's own message timestamp, which doubles as the message's id within
+    -- Signal. Needed to target a reaction (signal-cli keys reactions on
+    -- target_author + timestamp, not on our row id). NULL for 'out' rows and
+    -- for anything recorded before this column existed.
+    signal_ts   INTEGER,
     created_at  TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS messages_service ON messages(service_id, id);
@@ -98,6 +103,8 @@ class Store:
         have = {r["name"] for r in self._db.execute("PRAGMA table_info(messages)")}
         if "attachments" not in have:
             self._db.execute("ALTER TABLE messages ADD COLUMN attachments TEXT")
+        if "signal_ts" not in have:
+            self._db.execute("ALTER TABLE messages ADD COLUMN signal_ts INTEGER")
 
     def close(self) -> None:
         self._db.close()
@@ -283,19 +290,32 @@ class Store:
     def append_message(self, service_id: int, direction: str, via: str, text: str,
                        sender: str | None = None, sender_name: str | None = None,
                        has_attachments: bool = False,
-                       attachments: list[dict] | None = None) -> dict:
+                       attachments: list[dict] | None = None,
+                       signal_ts: int | None = None) -> dict:
         """attachments: signal descriptors ({'id', 'contentType', …}) for
-        incoming messages, so API clients can fetch the payloads later."""
+        incoming messages, so API clients can fetch the payloads later.
+        signal_ts: Signal's own timestamp for the message, required later to
+        target a reaction at it."""
         with self._lock, self._db:
             cur = self._db.execute(
                 "INSERT INTO messages(service_id,direction,via,sender,sender_name,"
-                "text,has_attachments,attachments,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                "text,has_attachments,attachments,signal_ts,created_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?)",
                 (service_id, direction, via, sender, sender_name, text,
                  int(has_attachments or bool(attachments)),
-                 json.dumps(attachments) if attachments else None, _now()),
+                 json.dumps(attachments) if attachments else None, signal_ts, _now()),
             )
             row = self._db.execute("SELECT * FROM messages WHERE id=?", (cur.lastrowid,)).fetchone()
         return self._message_dict(row)
+
+    def message_for_service(self, service_id: int, message_id: int) -> dict | None:
+        """One message, scoped to the service. The scoping is the authorization
+        check for the reaction API — a key may only react to its own group's
+        messages, never to another service's by guessing an id."""
+        row = self._db.execute(
+            "SELECT * FROM messages WHERE id=? AND service_id=?",
+            (message_id, service_id)).fetchone()
+        return self._message_dict(row) if row else None
 
     def service_has_attachment(self, service_id: int, attachment_id: str) -> bool:
         """Whether this attachment id appears in the service's message log —
