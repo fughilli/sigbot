@@ -16,6 +16,8 @@ GROUPS = [
 class FakeSignal:
     def __init__(self):
         self.sent = []
+        self.reactions = []
+        self.react_fails = False
 
     async def send(self, recipient, message, attachments_b64=None):
         self.sent.append((recipient, message, attachments_b64))
@@ -25,6 +27,11 @@ class FakeSignal:
 
     async def fetch_attachment(self, attachment_id):
         return b"attachment-bytes:" + attachment_id.encode()
+
+    async def react(self, recipient, emoji, target_author, timestamp, remove=False):
+        if getattr(self, "react_fails", False):
+            raise RuntimeError("signal-cli is down")
+        self.reactions.append((recipient, emoji, target_author, timestamp, remove))
 
 
 class ApiTest(AioHTTPTestCase):
@@ -193,6 +200,129 @@ class ApiTest(AioHTTPTestCase):
         # logout kills the session
         await self.client.post("/auth/logout")
         assert (await self.client.get("/admin/api/services")).status == 401
+
+    # -- reactions -------------------------------------------------------------
+
+    def _incoming(self, text="hi", sender="uuid-a", signal_ts=1700000000123):
+        return self.store.append_message(
+            self.service["id"], "in", "signal", text,
+            sender=sender, sender_name="Kay", signal_ts=signal_ts)
+
+    async def test_react_addresses_the_signal_message(self):
+        msg = self._incoming()
+        r = await self.client.post(f"/api/v1/messages/{msg['id']}/reactions",
+                                   json={"emoji": "\N{EYES}"}, headers=self._auth())
+        assert r.status == 200, await r.text()
+        assert (await r.json())["reacted"] is True
+        # recipient is the group; target is (author, Signal timestamp) — not our row id
+        assert self.signal.reactions == [
+            ("group.g1", "\N{EYES}", "uuid-a", 1700000000123, False)]
+
+    async def test_delete_needs_no_emoji_and_uses_the_recorded_one(self):
+        # One reaction per author per message, so "remove" is unambiguous; the
+        # caller shouldn't have to remember what it sent.
+        msg = self._incoming()
+        await self.client.post(f"/api/v1/messages/{msg['id']}/reactions",
+                               json={"emoji": "\N{EYES}"}, headers=self._auth())
+        r = await self.client.delete(f"/api/v1/messages/{msg['id']}/reactions",
+                                     headers=self._auth())
+        assert r.status == 200, await r.text()
+        body = await r.json()
+        assert body["reacted"] is False
+        assert body["emoji"] == "\N{EYES}"        # the one we actually placed
+        assert self.signal.reactions[-1][1] == "\N{EYES}"
+        assert self.signal.reactions[-1][4] is True  # remove flag
+
+    async def test_delete_without_a_prior_reaction_is_409(self):
+        msg = self._incoming()
+        r = await self.client.delete(f"/api/v1/messages/{msg['id']}/reactions",
+                                     headers=self._auth())
+        assert r.status == 409
+        assert "no reaction" in (await r.json())["error"]
+        assert self.signal.reactions == []
+
+    async def test_reacting_again_replaces_and_delete_clears_the_new_one(self):
+        # Mirrors Signal: a second reaction replaces the first.
+        msg = self._incoming()
+        for emoji in ("\N{EYES}", "\N{WHITE HEAVY CHECK MARK}"):
+            await self.client.post(f"/api/v1/messages/{msg['id']}/reactions",
+                                   json={"emoji": emoji}, headers=self._auth())
+        assert self.store.message_for_service(
+            self.service["id"], msg["id"])["bot_reaction"] == "\N{WHITE HEAVY CHECK MARK}"
+        r = await self.client.delete(f"/api/v1/messages/{msg['id']}/reactions",
+                                     headers=self._auth())
+        assert (await r.json())["emoji"] == "\N{WHITE HEAVY CHECK MARK}"
+        assert self.store.message_for_service(
+            self.service["id"], msg["id"])["bot_reaction"] is None
+
+    async def test_a_failed_send_records_no_reaction(self):
+        # Otherwise we'd believe we hold a reaction we never placed, and a later
+        # DELETE would send a spurious removal.
+        msg = self._incoming()
+        self.signal.react_fails = True
+        r = await self.client.post(f"/api/v1/messages/{msg['id']}/reactions",
+                                   json={"emoji": "\N{EYES}"}, headers=self._auth())
+        assert r.status == 502
+        assert self.store.message_for_service(
+            self.service["id"], msg["id"])["bot_reaction"] is None
+
+    async def test_reacting_requires_a_key(self):
+        msg = self._incoming()
+        r = await self.client.post(f"/api/v1/messages/{msg['id']}/reactions",
+                                   json={"emoji": "\N{EYES}"})
+        assert r.status == 401
+        assert self.signal.reactions == []
+
+    async def test_cannot_react_to_another_services_message(self):
+        # The scoping check is the authorization boundary: a key must not be
+        # able to reach another group's message by guessing an id.
+        other = self.store.create_service(
+            name="other", group_id="g2", group_send_id="group.g2",
+            group_name="Free Group", label="Other", system_prompt="x")
+        theirs = self.store.append_message(other["id"], "in", "signal", "secret",
+                                           sender="uuid-z", signal_ts=1700000000999)
+        r = await self.client.post(f"/api/v1/messages/{theirs['id']}/reactions",
+                                   json={"emoji": "\N{EYES}"}, headers=self._auth())
+        assert r.status == 404
+        assert self.signal.reactions == []
+
+    async def test_unknown_message_is_404(self):
+        r = await self.client.post("/api/v1/messages/99999/reactions",
+                                   json={"emoji": "\N{EYES}"}, headers=self._auth())
+        assert r.status == 404
+
+    async def test_outgoing_message_is_not_reactable(self):
+        # sigbot's own sends have no Signal author/timestamp recorded.
+        out = self.store.append_message(self.service["id"], "out", "api", "hello")
+        r = await self.client.post(f"/api/v1/messages/{out['id']}/reactions",
+                                   json={"emoji": "\N{EYES}"}, headers=self._auth())
+        assert r.status == 409
+        assert "not reactable" in (await r.json())["error"]
+
+    async def test_message_predating_the_column_is_not_reactable(self):
+        # Rows written before signal_ts existed migrate in with NULL.
+        old = self.store.append_message(self.service["id"], "in", "signal", "old",
+                                        sender="uuid-a", signal_ts=None)
+        r = await self.client.post(f"/api/v1/messages/{old['id']}/reactions",
+                                   json={"emoji": "\N{EYES}"}, headers=self._auth())
+        assert r.status == 409
+
+    async def test_emoji_is_required_and_bounded(self):
+        msg = self._incoming()
+        r = await self.client.post(f"/api/v1/messages/{msg['id']}/reactions",
+                                   json={}, headers=self._auth())
+        assert r.status == 400
+        r = await self.client.post(f"/api/v1/messages/{msg['id']}/reactions",
+                                   json={"emoji": "x" * 64}, headers=self._auth())
+        assert r.status == 400
+        assert self.signal.reactions == []
+
+    async def test_signal_failure_surfaces_as_502(self):
+        msg = self._incoming()
+        self.signal.react_fails = True
+        r = await self.client.post(f"/api/v1/messages/{msg['id']}/reactions",
+                                   json={"emoji": "\N{EYES}"}, headers=self._auth())
+        assert r.status == 502
 
 
 if __name__ == "__main__":

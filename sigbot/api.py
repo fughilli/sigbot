@@ -33,6 +33,10 @@ _SERVICE_PUBLIC_FIELDS = ("name", "label", "group_name", "respond_to", "prefix_l
 # entirely through the API (e.g. an external bot process like the finder).
 _RESPOND_POLICIES = ("all", "mention", "none")
 _MAX_ATTACHMENTS = 4
+# An emoji reaction is a grapheme cluster, not a character: a flag or a
+# skin-toned emoji is several codepoints joined by ZWJ. Generous enough for any
+# real emoji, tight enough that the field can't smuggle a message.
+_MAX_EMOJI_LEN = 32
 
 
 def _json_error(status: int, message: str) -> web.Response:
@@ -111,6 +115,61 @@ def build_app(store: Store, signal_client, default_model: str = "") -> web.Appli
         msg = store.append_message(service["id"], "out", "api", text,
                                    has_attachments=bool(attachments_b64))
         return web.json_response({"sent": True, "message": msg})
+
+    async def api_react(request: web.Request) -> web.Response:
+        """React to a message in this service's group, or retract with DELETE.
+
+        Reactions are how a bot acknowledges without adding to the transcript —
+        an API client can mark a message seen and later mark it done without
+        posting two more messages into the group.
+        """
+        service = require_service(request)
+        removing = request.method == "DELETE"
+        try:
+            message_id = int(request.match_info["id"])
+        except ValueError:
+            return _json_error(400, "message id must be an integer")
+
+        msg = store.message_for_service(service["id"], message_id)
+        if msg is None:
+            return _json_error(404, "no such message in this service")
+        # Both are needed to address a reaction, and neither exists for a message
+        # sigbot itself sent or for one received before signal_ts was recorded.
+        if not msg.get("signal_ts") or not msg.get("sender"):
+            return _json_error(
+                409,
+                "message cannot be reacted to: it has no Signal timestamp/author "
+                "(outgoing messages, and messages received before sigbot recorded "
+                "timestamps, are not reactable)")
+
+        if removing:
+            # Signal allows one reaction per author per message, so "remove
+            # sigbot's reaction" is unambiguous — the caller shouldn't have to
+            # remember which emoji it sent. signal-cli's DELETE requires an
+            # emoji but never matches on it, so we supply the one we recorded.
+            emoji = msg.get("bot_reaction")
+            if not emoji:
+                return _json_error(409, "no reaction from this service to remove")
+        else:
+            data = await _body(request)
+            emoji = (data.get("emoji") or "").strip()
+            if not emoji:
+                return _json_error(400, "emoji is required")
+            if len(emoji) > _MAX_EMOJI_LEN:
+                return _json_error(400, f"emoji too long ({_MAX_EMOJI_LEN} chars max)")
+
+        try:
+            await app["signal"].react(
+                service["group_send_id"], emoji, msg["sender"], int(msg["signal_ts"]),
+                remove=removing,
+            )
+        except Exception as e:
+            return _json_error(502, f"signal API reaction failed: {e}")
+        # Record only after Signal accepted it, so a failed send doesn't leave us
+        # believing we have a reaction we never placed.
+        store.set_bot_reaction(service["id"], message_id, None if removing else emoji)
+        return web.json_response(
+            {"reacted": not removing, "message_id": message_id, "emoji": emoji})
 
     async def api_attachment(request: web.Request) -> web.Response:
         service = require_service(request)
@@ -301,6 +360,8 @@ def build_app(store: Store, signal_client, default_model: str = "") -> web.Appli
     app.router.add_get("/api/v1/service", api_service)
     app.router.add_post("/api/v1/messages", api_send)
     app.router.add_get("/api/v1/messages", api_messages)
+    app.router.add_post(r"/api/v1/messages/{id:\d+}/reactions", api_react)
+    app.router.add_delete(r"/api/v1/messages/{id:\d+}/reactions", api_react)
     app.router.add_get("/api/v1/attachments/{id}", api_attachment)
 
     app.router.add_get("/admin/api/groups", admin_groups)

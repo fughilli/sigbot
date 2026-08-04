@@ -50,6 +50,31 @@ class SignalClient:
         b64 = base64.b64encode(image).decode()
         await self.send(recipient, message, [f"data:{mime};base64,{b64}"])
 
+    # -- reactions -------------------------------------------------------------
+
+    async def react(self, recipient: str, emoji: str, target_author: str,
+                    timestamp: int, remove: bool = False) -> None:
+        """React to one message. signal-cli identifies the target by
+        (target_author, timestamp) — its own message id — not by anything sigbot
+        assigns, which is why the timestamp has to be captured at receive time.
+
+        remove=True retracts a reaction previously sent with the same emoji.
+        """
+        payload: dict[str, Any] = {
+            "reaction": emoji,
+            "recipient": recipient,
+            "target_author": target_author,
+            "timestamp": timestamp,
+        }
+        # .request() rather than .post()/.delete(): the DELETE carries a body,
+        # which httpx's delete() shorthand has no json= kwarg for.
+        r = await self._http.request(
+            "DELETE" if remove else "POST",
+            f"/v1/reactions/{self.bot_number}",
+            json=payload,
+        )
+        r.raise_for_status()
+
     # -- profile ---------------------------------------------------------------
 
     async def set_profile_name(self, name: str) -> None:

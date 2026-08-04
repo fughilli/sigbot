@@ -119,3 +119,52 @@ def test_messages_and_cursor(store):
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
+
+
+def test_signal_ts_round_trips_and_scopes_by_service(tmp_path):
+    store = Store(tmp_path / "s.db")
+    a = store.create_service(name="a", group_id="g1", group_send_id="group.g1",
+                            group_name="A", label="A", system_prompt="x")
+    b = store.create_service(name="b", group_id="g2", group_send_id="group.g2",
+                             group_name="B", label="B", system_prompt="x")
+    msg = store.append_message(a["id"], "in", "signal", "hi", sender="uuid-a",
+                               signal_ts=1700000000123)
+    assert msg["signal_ts"] == 1700000000123
+    assert store.message_for_service(a["id"], msg["id"])["signal_ts"] == 1700000000123
+    # Another service must not be able to read it by id.
+    assert store.message_for_service(b["id"], msg["id"]) is None
+    assert store.message_for_service(a["id"], 999999) is None
+
+
+def test_signal_ts_defaults_to_null_for_sends(tmp_path):
+    store = Store(tmp_path / "s.db")
+    s = store.create_service(name="a", group_id="g1", group_send_id="group.g1",
+                             group_name="A", label="A", system_prompt="x")
+    assert store.append_message(s["id"], "out", "api", "hello")["signal_ts"] is None
+
+
+def test_migration_adds_signal_ts_to_an_existing_db(tmp_path):
+    """A DB created before the column exists must migrate, not crash."""
+    import sqlite3
+
+    path = tmp_path / "old.db"
+    db = sqlite3.connect(path)
+    db.executescript("""
+        CREATE TABLE messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            service_id INTEGER NOT NULL,
+            direction TEXT NOT NULL, via TEXT NOT NULL,
+            sender TEXT, sender_name TEXT, text TEXT NOT NULL,
+            has_attachments INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL);
+    """)
+    db.execute("INSERT INTO messages(service_id,direction,via,text,created_at) "
+               "VALUES(1,'in','signal','old row','2020-01-01T00:00:00+00:00')")
+    db.commit()
+    db.close()
+
+    store = Store(path)  # runs _migrate
+    cols = {r["name"] for r in store._db.execute("PRAGMA table_info(messages)")}
+    assert "signal_ts" in cols
+    row = store._db.execute("SELECT signal_ts FROM messages").fetchone()
+    assert row["signal_ts"] is None  # pre-existing rows are simply not reactable

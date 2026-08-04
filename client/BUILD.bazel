@@ -29,6 +29,6 @@ py_wheel(
     python_tag = "py3",
     strip_path_prefixes = ["client"],
     summary = "Client for the sigbot per-group-chat service API (stdlib-only)",
-    version = "0.2.5",
+    version = "0.3.0",
     deps = [":sigbot_client_lib"],
 )

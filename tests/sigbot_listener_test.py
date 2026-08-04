@@ -69,3 +69,32 @@ def test_attachment_only_message_passes():
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
+
+
+def test_parse_envelope_captures_the_signal_timestamp():
+    """The reaction target id. dataMessage.timestamp wins over the envelope's."""
+    services = {"g1": {"label": "Opsy", "name": "ops"}}
+    env = {
+        "sourceUuid": "uuid-a",
+        "sourceName": "Kay",
+        "timestamp": 1700000009999,
+        "dataMessage": {
+            "message": "hello",
+            "timestamp": 1700000000123,
+            "groupInfo": {"groupId": "g1"},
+        },
+    }
+    inc = parse_envelope(env, "+15550000000", "sigbot", services)
+    assert inc is not None
+    assert inc.signal_ts == 1700000000123
+
+
+def test_parse_envelope_falls_back_to_the_envelope_timestamp():
+    services = {"g1": {"label": "Opsy", "name": "ops"}}
+    env = {
+        "sourceUuid": "uuid-a",
+        "timestamp": 1700000009999,
+        "dataMessage": {"message": "hello", "groupInfo": {"groupId": "g1"}},
+    }
+    inc = parse_envelope(env, "+15550000000", "sigbot", services)
+    assert inc.signal_ts == 1700000009999

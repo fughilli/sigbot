@@ -80,5 +80,30 @@ def test_http_error_surfaces(monkeypatch):
     assert "revoked" in ei.value.message
 
 
+def test_react_posts_to_the_message_reactions_path(calls):
+    bot = ServiceClient("http://host:8100", api_key="sb_abc")
+    bot.react(7, "\N{EYES}")
+    req = calls[0]
+    assert req.full_url == "http://host:8100/api/v1/messages/7/reactions"
+    assert req.get_method() == "POST"
+    assert json.loads(req.data) == {"emoji": "\N{EYES}"}
+
+
+def test_unreact_is_argumentless_and_sends_no_body(calls):
+    # One reaction per message, so there is nothing to disambiguate.
+    bot = ServiceClient("http://host:8100", api_key="sb_abc")
+    bot.unreact(7)
+    req = calls[0]
+    assert req.full_url == "http://host:8100/api/v1/messages/7/reactions"
+    assert req.get_method() == "DELETE"
+    assert req.data is None
+
+
+def test_react_coerces_the_message_id(calls):
+    # Guards against a str id silently producing /messages/None/reactions.
+    ServiceClient("http://host:8100", api_key="sb_abc").react("7", "\N{EYES}")
+    assert calls[0].full_url.endswith("/api/v1/messages/7/reactions")
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
