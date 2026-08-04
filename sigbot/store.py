@@ -71,6 +71,13 @@ CREATE TABLE IF NOT EXISTS messages (
     -- target_author + timestamp, not on our row id). NULL for 'out' rows and
     -- for anything recorded before this column existed.
     signal_ts   INTEGER,
+    -- The emoji sigbot currently has on this message, or NULL for none. Signal
+    -- allows one reaction per author per message, so a single column is the
+    -- right cardinality — reacting again replaces, exactly as Signal does.
+    -- Kept so removal can be addressed by message alone: signal-cli demands an
+    -- emoji on its DELETE but never matches on it, so remembering ours is what
+    -- lets callers say "clear it" without tracking what they sent.
+    bot_reaction TEXT,
     created_at  TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS messages_service ON messages(service_id, id);
@@ -105,6 +112,8 @@ class Store:
             self._db.execute("ALTER TABLE messages ADD COLUMN attachments TEXT")
         if "signal_ts" not in have:
             self._db.execute("ALTER TABLE messages ADD COLUMN signal_ts INTEGER")
+        if "bot_reaction" not in have:
+            self._db.execute("ALTER TABLE messages ADD COLUMN bot_reaction TEXT")
 
     def close(self) -> None:
         self._db.close()
@@ -316,6 +325,15 @@ class Store:
             "SELECT * FROM messages WHERE id=? AND service_id=?",
             (message_id, service_id)).fetchone()
         return self._message_dict(row) if row else None
+
+    def set_bot_reaction(self, service_id: int, message_id: int,
+                         emoji: str | None) -> None:
+        """Record (or clear, with None) the emoji sigbot has on a message.
+        Service-scoped for the same reason message_for_service is."""
+        with self._lock, self._db:
+            self._db.execute(
+                "UPDATE messages SET bot_reaction=? WHERE id=? AND service_id=?",
+                (emoji, message_id, service_id))
 
     def service_has_attachment(self, service_id: int, attachment_id: str) -> bool:
         """Whether this attachment id appears in the service's message log —

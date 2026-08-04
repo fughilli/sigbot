@@ -117,13 +117,16 @@ The server binds one port (default 8100) carrying both surfaces:
   scoped to its service's group — read the message log
   (`GET /api/v1/messages`, incremental via `after_id`), post into the group
   as the bot (`POST /api/v1/messages`, optional `attachments_b64`), react to an
-  incoming message (`POST`/`DELETE /api/v1/messages/{id}/reactions`, body
-  `{"emoji": "👀"}`), download incoming attachments
+  incoming message (`POST /api/v1/messages/{id}/reactions` with
+  `{"emoji": "👀"}`; `DELETE` the same path — no body — to clear it), download
+  incoming attachments
   (`GET /api/v1/attachments/{id}`), inspect the persona (`GET /api/v1/service`).
 
   Reactions let a bot acknowledge without adding to the transcript — mark a
   message 👀 on receipt and ✅ when the work is done, instead of posting two more
-  messages into the group. Only *incoming* messages are reactable: Signal
+  messages into the group. Signal allows one reaction per author per message, so
+  reacting again replaces rather than accumulates, and clearing needs no emoji:
+  sigbot records the one it placed. Only *incoming* messages are reactable: Signal
   addresses a reaction by the target's author and timestamp, which sigbot records
   on receive but has no equivalent for its own sends (those return `409`, as do
   messages received before sigbot started recording timestamps).

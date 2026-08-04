@@ -76,6 +76,9 @@ class ServiceClient:
         """React to a message in the group — how a bot acknowledges without
         adding to the transcript (e.g. 👀 on receipt, ✅ when done).
 
+        Signal allows one reaction per author per message, so reacting again
+        REPLACES the previous one rather than adding a second.
+
         Only incoming messages can be reacted to: Signal addresses a reaction by
         the target's author and timestamp, which sigbot records for messages it
         receives but not for ones it sends.
@@ -83,10 +86,14 @@ class ServiceClient:
         return self._request(
             "POST", f"/api/v1/messages/{int(message_id)}/reactions", {"emoji": emoji})
 
-    def unreact(self, message_id: int, emoji: str) -> dict:
-        """Retract a reaction previously sent with the same emoji."""
+    def unreact(self, message_id: int) -> dict:
+        """Clear this service's reaction from a message.
+
+        No emoji: there is only ever one to remove, and sigbot remembers which
+        it placed. Raises SigbotApiError(409) if there is no reaction to clear.
+        """
         return self._request(
-            "DELETE", f"/api/v1/messages/{int(message_id)}/reactions", {"emoji": emoji})
+            "DELETE", f"/api/v1/messages/{int(message_id)}/reactions")
 
     def fetch_attachment(self, attachment_id: str) -> bytes:
         """Download an attachment referenced by a message's 'attachments'

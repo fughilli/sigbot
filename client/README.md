@@ -31,9 +31,9 @@ msgs = bot.messages(limit=50)
 newer = bot.messages(after_id=msgs[-1]["id"]) if msgs else []
 
 # React to a message — acknowledge without adding to the transcript:
-bot.react(msgs[-1]["id"], "👀")     # seen it
-bot.react(msgs[-1]["id"], "✅")     # ...and done
-bot.unreact(msgs[-1]["id"], "👀")   # retract
+bot.react(msgs[-1]["id"], "👀")   # seen it
+bot.react(msgs[-1]["id"], "✅")   # ...and done (replaces the 👀)
+bot.unreact(msgs[-1]["id"])       # clear it — no emoji, there's only ever one
 ```
 
 Only *incoming* messages can be reacted to. Signal addresses a reaction by the

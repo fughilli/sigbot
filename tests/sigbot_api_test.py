@@ -218,13 +218,53 @@ class ApiTest(AioHTTPTestCase):
         assert self.signal.reactions == [
             ("group.g1", "\N{EYES}", "uuid-a", 1700000000123, False)]
 
-    async def test_delete_retracts_the_reaction(self):
+    async def test_delete_needs_no_emoji_and_uses_the_recorded_one(self):
+        # One reaction per author per message, so "remove" is unambiguous; the
+        # caller shouldn't have to remember what it sent.
+        msg = self._incoming()
+        await self.client.post(f"/api/v1/messages/{msg['id']}/reactions",
+                               json={"emoji": "\N{EYES}"}, headers=self._auth())
+        r = await self.client.delete(f"/api/v1/messages/{msg['id']}/reactions",
+                                     headers=self._auth())
+        assert r.status == 200, await r.text()
+        body = await r.json()
+        assert body["reacted"] is False
+        assert body["emoji"] == "\N{EYES}"        # the one we actually placed
+        assert self.signal.reactions[-1][1] == "\N{EYES}"
+        assert self.signal.reactions[-1][4] is True  # remove flag
+
+    async def test_delete_without_a_prior_reaction_is_409(self):
         msg = self._incoming()
         r = await self.client.delete(f"/api/v1/messages/{msg['id']}/reactions",
-                                     json={"emoji": "\N{EYES}"}, headers=self._auth())
-        assert r.status == 200
-        assert (await r.json())["reacted"] is False
-        assert self.signal.reactions[0][4] is True  # remove flag
+                                     headers=self._auth())
+        assert r.status == 409
+        assert "no reaction" in (await r.json())["error"]
+        assert self.signal.reactions == []
+
+    async def test_reacting_again_replaces_and_delete_clears_the_new_one(self):
+        # Mirrors Signal: a second reaction replaces the first.
+        msg = self._incoming()
+        for emoji in ("\N{EYES}", "\N{WHITE HEAVY CHECK MARK}"):
+            await self.client.post(f"/api/v1/messages/{msg['id']}/reactions",
+                                   json={"emoji": emoji}, headers=self._auth())
+        assert self.store.message_for_service(
+            self.service["id"], msg["id"])["bot_reaction"] == "\N{WHITE HEAVY CHECK MARK}"
+        r = await self.client.delete(f"/api/v1/messages/{msg['id']}/reactions",
+                                     headers=self._auth())
+        assert (await r.json())["emoji"] == "\N{WHITE HEAVY CHECK MARK}"
+        assert self.store.message_for_service(
+            self.service["id"], msg["id"])["bot_reaction"] is None
+
+    async def test_a_failed_send_records_no_reaction(self):
+        # Otherwise we'd believe we hold a reaction we never placed, and a later
+        # DELETE would send a spurious removal.
+        msg = self._incoming()
+        self.signal.react_fails = True
+        r = await self.client.post(f"/api/v1/messages/{msg['id']}/reactions",
+                                   json={"emoji": "\N{EYES}"}, headers=self._auth())
+        assert r.status == 502
+        assert self.store.message_for_service(
+            self.service["id"], msg["id"])["bot_reaction"] is None
 
     async def test_reacting_requires_a_key(self):
         msg = self._incoming()
